@@ -1,0 +1,43 @@
+ERROR_CODES = {
+    "00": "NO ERROR",
+    "40": "POWER LOSS – Amplifier internal power loss, condition; I/F still active",
+    "41": "POWER SUPPLY FAULT - Amplifier high voltage, power supply failure",
+    "42": "DUTY CYCLE – Maximum UNBLANK duty cycle exceeded",
+    "43": "CURRENT OVERLOAD - Instantaneous peak current, in RF device(s) exceeds spec",
+    "44": "DEVICE FAULT – RF device shorted",
+    "45": "HV LOW – Amplifier high voltage power supply voltage dropped below specified minimum",
+    "46": "HV HIGH – Amplifier high voltage power supply voltage went above specified limit",
+    "48": "DRIVE - RF Drive level to amp exceeds specification",
+    "49": "HEAT – RF heat sink temperature exceeds specification",
+    "4A": "PEAK POWER – Peak power from amplifier exceeds specification",
+    "4B": "AVG PWR – Average power from amplifier exceeds specification",
+    "4C": "VSWR - Load VSWR exceeds specification",
+    "4D": "GATE - Unblank gate length exceeds specification",
+    "4E": "JUNCTION TEMPERATURE - RF device junction temperature exceeds specification",
+    "4F": "UNDEFINED FAULT - All other RF Amplifier faults",
+    "32": "HV RELAY LOW - Power monitor 1 or 2 fault; safety limit allowed for scan parameters has been reached",
+    "20": "OVERHEAT - SRFD II Module has exceeded maximum operating temperature",
+    "22": "CABLE FAULT - Bad or disconnected internal cable",
+    "30": "POWER MONITOR 1 FAULT - Safety limit allowed for scan parameters has been reached",
+    "31": "POWER MONITOR 2 FAULT - Safety limit allowed for scan parameters has been reached",
+    "50": "WATCHDOG TIMER FAILURE",
+    "51": "WATCHDOG CLOCK MONITOR FAILURE",
+    "52": "UNRECOVERABLE FIRMWARE ERROR - Unimplemented instruction trap",
+    "53": "UNRECOVERABLE FIRMWARE ERROR - Software interrupt",
+    "54": "UNRECOVERABLE FIRMWARE ERROR - Unused Timer channel",
+    "55": "UNRECOVERABLE FIRMWARE ERROR - Unused Pulse accumulator",
+    "56": "UNRECOVERABLE FIRMWARE ERROR - ATD (Analog-to-Digital Converter) interrupt",
+    "57": "UNRECOVERABLE FIRMWARE ERROR - BDLC (Byte Data Link Communications) interrupt",
+    "58": "UNRECOVERABLE FIRMWARE ERROR - RAM broken",
+    "59": "UNRECOVERABLE FIRMWARE ERROR - Undefined State",
+    "5A": "UNRECOVERABLE FIRMWARE ERROR - Reserved for future firmware errors",
+    "5B": "UNRECOVERABLE FIRMWARE ERROR - Reserved for future firmware errors",
+    "5C": "UNRECOVERABLE FIRMWARE ERROR - Reserved for future firmware errors",
+    "5D": "UNRECOVERABLE FIRMWARE ERROR - Reserved for future firmware errors",
+    "5E": "UNRECOVERABLE FIRMWARE ERROR - Reserved for future firmware errors",
+    "5F": "UNRECOVERABLE FIRMWARE ERROR - Reserved for future firmware errors"
+}
+
+def decode_error(code: str) -> str:
+    code = code.strip().upper()
+    return ERROR_CODES.get(code, "Code d’erreur inconnu")

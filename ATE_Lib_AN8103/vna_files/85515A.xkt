@@ -1,0 +1,127 @@
+<?xml version="1.0"?>
+<CalKit xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <CalKitLabel>85515A</CalKitLabel>
+  <CalKitVersion />
+  <CalKitDescription>Type-N female</CalKitDescription>
+  <ConnectorList>
+    <Coaxial>
+      <Family>Type-N</Family>
+      <Gender>Female</Gender>
+      <MaximumFrequencyHz>9000000000</MaximumFrequencyHz>
+      <MinimumFrequencyHz>0</MinimumFrequencyHz>
+      <SystemZ0>50</SystemZ0>
+    </Coaxial>
+    <Coaxial>
+      <Family>Type-N</Family>
+      <Gender>Male</Gender>
+      <MaximumFrequencyHz>9000000000</MaximumFrequencyHz>
+      <MinimumFrequencyHz>0</MinimumFrequencyHz>
+      <SystemZ0>50</SystemZ0>
+    </Coaxial>
+  </ConnectorList>
+  <StandardList>
+    <ThruStandard>
+      <Label>THRU</Label>
+      <Description>Insertable thru standard</Description>
+      <PortConnectorIDs>Type-N Male</PortConnectorIDs>
+      <PortConnectorIDs>Type-N Male</PortConnectorIDs>
+      <MaximumFrequencyHz>9000000000</MaximumFrequencyHz>
+      <MinimumFrequencyHz>0</MinimumFrequencyHz>
+      <StandardNumber>1</StandardNumber>
+      <Offset>
+        <OffsetDelay>2.41167E-10</OffsetDelay>
+        <OffsetLoss>1000000000</OffsetLoss>
+        <OffsetZ0>50</OffsetZ0>
+      </Offset>
+    </ThruStandard>
+    <OpenStandard>
+      <Label>OPEN -M-</Label>
+      <Description>Type-N male open</Description>
+      <PortConnectorIDs>Type-N Male</PortConnectorIDs>
+      <MaximumFrequencyHz>9000000000</MaximumFrequencyHz>
+      <MinimumFrequencyHz>0</MinimumFrequencyHz>
+      <StandardNumber>2</StandardNumber>
+      <C0>-7.725E-15</C0>
+      <C1>-2.0627965E-24</C1>
+      <C2>1.3174549999999999E-33</C2>
+      <C3>-1.1218E-43</C3>
+      <Offset>
+        <OffsetDelay>5.3531E-11</OffsetDelay>
+        <OffsetLoss>1000000000</OffsetLoss>
+        <OffsetZ0>50</OffsetZ0>
+      </Offset>
+    </OpenStandard>
+    <ShortStandard>
+      <Label>SHORT -M-</Label>
+      <Description>Type-N male short</Description>
+      <PortConnectorIDs>Type-N Male</PortConnectorIDs>
+      <MaximumFrequencyHz>9000000000</MaximumFrequencyHz>
+      <MinimumFrequencyHz>0</MinimumFrequencyHz>
+      <StandardNumber>3</StandardNumber>
+      <L0>2.5366499999999998E-11</L0>
+      <L1>-8.070933E-21</L1>
+      <L2>9.3291E-31</L2>
+      <L3>-3.3888E-41</L3>
+      <Offset>
+        <OffsetDelay>5.3444E-11</OffsetDelay>
+        <OffsetLoss>1000000000</OffsetLoss>
+        <OffsetZ0>50</OffsetZ0>
+      </Offset>
+    </ShortStandard>
+    <FixedLoadStandard>
+      <Label>LOAD -M-</Label>
+      <Description>Type-N male load</Description>
+      <PortConnectorIDs>Type-N Male</PortConnectorIDs>
+      <MaximumFrequencyHz>9000000000</MaximumFrequencyHz>
+      <MinimumFrequencyHz>0</MinimumFrequencyHz>
+      <StandardNumber>4</StandardNumber>
+      <Offset>
+        <OffsetDelay>0</OffsetDelay>
+        <OffsetLoss>0</OffsetLoss>
+        <OffsetZ0>50</OffsetZ0>
+      </Offset>
+    </FixedLoadStandard>
+  </StandardList>
+  <KitClasses>
+    <KitClassID>TRL_THRU</KitClassID>
+    <StandardsList>1</StandardsList>
+    <KitClassLabel>TRL_THRU</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>FORWARD_THRU</KitClassID>
+    <StandardsList>1</StandardsList>
+    <KitClassLabel>THRUS</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>SA</KitClassID>
+    <StandardsList>2</StandardsList>
+    <KitClassLabel>OPENS</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>SB</KitClassID>
+    <StandardsList>3</StandardsList>
+    <KitClassLabel>SHORTS</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>SC</KitClassID>
+    <StandardsList>4</StandardsList>
+    <KitClassLabel>LOADS</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>FORWARD_MATCH</KitClassID>
+    <StandardsList>1</StandardsList>
+    <KitClassLabel>THRUS</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>REVERSE_THRU</KitClassID>
+    <StandardsList>1</StandardsList>
+    <KitClassLabel>THRUS</KitClassLabel>
+  </KitClasses>
+  <KitClasses>
+    <KitClassID>REVERSE_MATCH</KitClassID>
+    <StandardsList>1</StandardsList>
+    <KitClassLabel>THRUS</KitClassLabel>
+  </KitClasses>
+  <TRLRefPlane>ThruStandard</TRLRefPlane>
+  <LRLAutoCharacterization>UseAutoCharacterization</LRLAutoCharacterization>
+</CalKit>
