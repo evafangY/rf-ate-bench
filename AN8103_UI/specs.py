@@ -16,7 +16,7 @@ PERFORMANCE_SPECS = {
     "13114": ("Seq7 body output power variation", "%", None, 2.00),
     "13115": ("Seq8 body output power variation", "%", None, 2.00),
     "13201": ("Harmonic output", "dBc", None, -30.00),
-    "13204": ("Unblanked output noise power broad spectrum", "dBm/Hz", None, -70.00),
+    "13204": ("Ublanked output noise power broad spectrum", "dBm/Hz", None, -70.00),
     "13205": ("Gain non-linearity, body forward (-40 to 0 dBm)", "dB", 0.00, 0.80),
     "13206": ("Differential gain, body forward (-40 to -3 dBm)", "dB/dB", -0.10, 0.10),
     "13207": ("Differential gain, body forward (-3 to -1 dBm)", "dB/dB", -0.20, 0.10),
@@ -66,3 +66,8 @@ NOISE_SPECS = {
     "13203": ("Random noise (broad spectrum)", "dBm/Hz", None, -160.00),
 }
 
+DIAGNOSTIC_SPECS = {
+    "bias": ("Bias nominal", "", 175, 225),
+}
+
+DIAGNOSTIC_EXCLUDED_BIASES = ["biasQ31", "biasQ33", "biasQ35"]
