@@ -14,25 +14,10 @@ from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
 from ATE_Lib_AN8103.ate_lib import COMM_Error, ATE_Instrument_Error
 import datetime
-from AN8103_UI.data_store import SessionData, PhaseResult, PHASE_IMAGE_MAP
-from AN8103_UI.phase_services import (
-    run_diagnostic,
-    run_output_conditional_simulation,
-    run_power_module_gain_simulation,
-    run_input_conditional_simulation,
-    run_performance_test,
-    run_noise_blanked,
-)
-
-
-PHASES = [
-    "Diagnostic",
-    "Tuning de la sortie conditionnelle",
-    "Tuning de la gain du module de puissance",
-    "Tuning de l'entrée conditionnelle",
-    "Test de performance / burning",
-    "Basculement de bruit",
-]
+import re
+from .data_store import SessionData, PhaseResult
+from .phase_config import PHASES, PHASE_CONFIG
+from .phase_controller import make_phase_runner, make_subtest_runner
 
 
 class LoginPage(QWidget):
@@ -177,13 +162,26 @@ class PhaseMenuPage(QWidget):
 
 
 class PhasePage(QWidget):
-    def __init__(self, phase_name, run_callback, back_callback, instruction_text="", image_path=None, require_check=False):
+    def __init__(
+        self,
+        phase_name,
+        run_callback,
+        back_callback,
+        instruction_text="",
+        image_path=None,
+        require_check=False,
+        check_text=None,
+        caption_text=None,
+        subtests=None,
+    ):
         super().__init__()
         self.phase_name = phase_name
         self.run_callback = run_callback
         self.back_callback = back_callback
         self.require_check = require_check
         self.checked = not require_check
+        self.subtests = subtests or []
+        self.subtest_buttons = []
 
         layout = QVBoxLayout()
         layout.setSpacing(10)
@@ -212,10 +210,16 @@ class PhasePage(QWidget):
             if not pix.isNull():
                 self.image_label.setPixmap(pix.scaledToHeight(250, Qt.SmoothTransformation))
         layout.addWidget(self.image_label)
+        if caption_text:
+            caption = QLabel(caption_text)
+            caption.setAlignment(Qt.AlignCenter)
+            caption.setFont(QFont("Arial", 11))
+            layout.addWidget(caption)
 
         if self.require_check:
             check_row = QHBoxLayout()
-            check_label = QLabel("Etape 1: vérifier les connections de l'amplificateur et du bench.\nCliquez sur 'Checked' une fois vérifié.")
+            text = check_text if check_text is not None else ""
+            check_label = QLabel(text)
             check_label.setWordWrap(True)
             check_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             check_label.setFont(QFont("Arial", 12))
@@ -225,6 +229,17 @@ class PhasePage(QWidget):
             self.check_button.clicked.connect(self.on_checked)
             check_row.addWidget(self.check_button)
             layout.addLayout(check_row)
+
+        if self.subtests:
+            sub_row = QHBoxLayout()
+            for label, cb in self.subtests:
+                btn = QPushButton(label)
+                btn.setFont(QFont("Arial", 12))
+                btn.clicked.connect(self.make_subtest_handler(cb))
+                btn.setEnabled(False)
+                self.subtest_buttons.append(btn)
+                sub_row.addWidget(btn)
+            layout.addLayout(sub_row)
 
         self.result_display = QTextEdit()
         self.result_display.setFont(QFont("Arial", 12))
@@ -251,40 +266,93 @@ class PhasePage(QWidget):
         layout.addLayout(button_row)
         self.setLayout(layout)
 
+    def enable_subtests(self, enabled: bool):
+        for btn in self.subtest_buttons:
+            btn.setEnabled(enabled)
+
     def on_checked(self):
         self.checked = True
         self.run_button.setEnabled(True)
         self.check_button.setStyleSheet("background-color: green; color: white;")
 
     def on_run(self):
+        self.handle_run(self.run_callback, True)
+
+    def make_subtest_handler(self, cb):
+        def handler():
+            self.handle_run(cb, False)
+
+        return handler
+
+    def handle_run(self, callback, update_status):
         self.result_display.clear()
         try:
-            text_lines, ok = self.run_callback()
+            text_lines, ok = callback()
             if text_lines:
                 joined = "\n".join(text_lines)
                 if "<" in joined and ">" in joined:
                     self.result_display.setHtml(joined)
                 else:
-                    self.result_display.setText(joined)
-            if ok:
-                self.next_button.setEnabled(True)
-                self.status_label.setText("Statut du test : Réussi")
-                self.status_label.setStyleSheet("color: green;")
-            else:
-                self.status_label.setText("Statut du test : Échec")
-                self.status_label.setStyleSheet("color: red;")
+                    rows = []
+                    for line in text_lines:
+                        if " – " in line and "[" in line and "]" in line and ": " in line:
+                            try:
+                                id_part, rest = line.split(" – ", 1)
+                                label_part, tail = rest.split(": ", 1)
+                                before_bracket, after_bracket = tail.split("[", 1)
+                                bracket_content, status_part = after_bracket.split("]", 1)
+                                status = status_part.strip()
+                                tokens = before_bracket.strip().split()
+                                value = tokens[0]
+                                unit = " ".join(tokens[1:]) if len(tokens) > 1 else ""
+                                spec_min, spec_max = "", ""
+                                if ".." in bracket_content:
+                                    spec_min, spec_max = [t.strip() for t in bracket_content.split("..", 1)]
+                                rows.append((id_part.strip(), label_part.strip(), value, unit, spec_min, spec_max, status))
+                            except Exception:
+                                pass
+                    if rows:
+                        html = []
+                        html.append("<table border='1' cellspacing='0' cellpadding='3'>")
+                        html.append("<tr><th>ID</th><th>Mesure</th><th>Valeur</th><th>Unité</th><th>Spec min</th><th>Spec max</th><th>Statut</th></tr>")
+                        for r in rows:
+                            idp, labelp, valp, unitp, smin, smax, stat = r
+                            row_style = ""
+                            if stat.upper() == "FAIL":
+                                row_style = " style='color:red;font-weight:bold'"
+                            elif stat.upper() == "OK":
+                                row_style = " style='color:green'"
+                            html.append(
+                                f"<tr{row_style}><td>{idp}</td><td>{labelp}</td><td>{valp}</td>"
+                                f"<td>{unitp}</td><td>{smin}</td><td>{smax}</td><td>{stat}</td></tr>"
+                            )
+                        html.append("</table>")
+                        self.result_display.setHtml("".join(html))
+                    else:
+                        self.result_display.setText(joined)
+            if update_status:
+                if ok:
+                    self.next_button.setEnabled(True)
+                    self.status_label.setText("Statut du test : Réussi")
+                    self.status_label.setStyleSheet("color: green;")
+                else:
+                    self.status_label.setText("Statut du test : Échec")
+                    self.status_label.setStyleSheet("color: red;")
         except COMM_Error as e:
             QMessageBox.warning(self, "Amplificateur error", f"Error {hex(e.code)}")
-            self.status_label.setText("Statut du test : Échec")
-            self.status_label.setStyleSheet("color: red;")
+            if update_status:
+                self.status_label.setText("Statut du test : Échec")
+                self.status_label.setStyleSheet("color: red;")
         except ATE_Instrument_Error as e:
             QMessageBox.warning(self, "Instrument error", str(e.instrument))
-            self.status_label.setText("Statut du test : Échec")
-            self.status_label.setStyleSheet("color: red;")
+            if update_status:
+                self.status_label.setText("Statut du test : Échec")
+                self.status_label.setStyleSheet("color: red;")
         except Exception as e:
             QMessageBox.warning(self, "Unexpected error", str(e))
-            self.status_label.setText("Statut du test : Échec")
-            self.status_label.setStyleSheet("color: red;")
+            if update_status:
+                self.status_label.setText("Statut du test : Échec")
+                self.status_label.setStyleSheet("color: red;")
 
 
 class MainWindow(QWidget):
@@ -317,17 +385,33 @@ class MainWindow(QWidget):
         self.stack.addWidget(self.menu_page)
 
         for phase in PHASES:
-            instruction_text = ""
-            image_path = PHASE_IMAGE_MAP.get(phase)
-            require_check = phase == "Diagnostic"
-            if phase == "Diagnostic":
-                instruction_text = (
-                    "Etape 0: Connecter l'alimentation de l'amplificateur au bench.\n"
-                    "Connecter le cable de communication main, master et slave.\n"
-                    "Alimenter l'amplificateur.\n"
-                    "L'outil de diagnostic va lire l'état et les registres d'erreur de l'amplificateur."
-                )
-            page = PhasePage(phase, self.make_phase_runner(phase), self.back_to_menu, instruction_text, image_path, require_check=require_check)
+            cfg = PHASE_CONFIG.get(phase, {})
+            instruction_text = cfg.get("instruction", "")
+            image_path = cfg.get("image", None)
+            require_check = bool(cfg.get("require_check", False))
+            check_text = cfg.get("check_text", None) or None
+            caption_text = cfg.get("caption", None) or None
+            subtest_defs = cfg.get("subtests", [])
+            subtests = []
+            for st in subtest_defs:
+                method_name = st.get("method")
+                label = st.get("label") or method_name
+                if not method_name:
+                    continue
+                runner = make_subtest_runner(method_name, self.ate)
+                subtests.append((label, runner))
+            page = PhasePage(
+                phase,
+                self.make_phase_runner(phase),
+                self.back_to_menu,
+                instruction_text,
+                image_path,
+                require_check=require_check,
+                check_text=check_text,
+                caption_text=caption_text,
+                subtests=subtests,
+            )
+            page.enable_subtests(self.eng_mode)
             page.next_button.clicked.connect(self.next_phase)
             self.phase_pages.append(page)
             self.stack.addWidget(page)
@@ -361,6 +445,8 @@ class MainWindow(QWidget):
         if password == "amprf":
             self.eng_mode = True
             self.menu_page.enable_engineering(True)
+            for p in self.phase_pages:
+                p.enable_subtests(True)
             QMessageBox.information(self, "Engineering mode", "Engineering mode enabled.")
         else:
             QMessageBox.warning(self, "Engineering mode", "Incorrect password.")
@@ -371,26 +457,10 @@ class MainWindow(QWidget):
             self.stack.setCurrentIndex(2 + index)
 
     def make_phase_runner(self, phase_name):
-        def runner():
-            lines = []
-            ok = True
-            values = {}
-            if phase_name == "Diagnostic":
-                lines, ok, values = run_diagnostic(self.ate)
-            elif phase_name in ("Output conditional tuning", "Tuning de la sortie conditionnelle"):
-                lines, ok, values = run_output_conditional_simulation()
-            elif phase_name in ("Power module gain tuning", "Tuning de la gain du module de puissance"):
-                lines, ok, values = run_power_module_gain_simulation()
-            elif phase_name in ("Input conditional board tuning", "Tuning de l'entrée conditionnelle"):
-                lines, ok, values = run_input_conditional_simulation()
-            elif phase_name in ("Performance test / burn", "Test de performance / burning"):
-                lines, ok, values = run_performance_test(self.ate)
-            elif phase_name in ("Noise blanked", "Basculement de bruit"):
-                lines, ok, values = run_noise_blanked(self.ate)
-            else:
-                lines.append(f"{phase_name} is not implemented yet.")
-                ok = False
+        base_runner = make_phase_runner(phase_name, self.ate)
 
+        def runner():
+            lines, ok, values = base_runner()
             self.session.add_phase_result(PhaseResult(phase_name, lines, ok, values))
             self.phase_ok[phase_name] = True
             if phase_name in PHASES:

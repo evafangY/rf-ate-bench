@@ -1,8 +1,11 @@
 import datetime
-from AN8103_UI.error_codes import ERROR_CODES, ERROR_HINTS, decode_error
-from AN8103_UI.specs import PERFORMANCE_SPECS
+from .error_codes import ERROR_CODES, ERROR_HINTS, decode_error
+from .specs import PERFORMANCE_SPECS, DIAGNOSTIC_SPECS, DIAGNOSTIC_EXCLUDED_BIASES
 
 def render_bias_grid(biases, columns=4):
+    spec = DIAGNOSTIC_SPECS.get("bias")
+    bias_min = spec[2] if spec else 175
+    bias_max = spec[3] if spec else 225
     items = list(biases.items())
     html = []
     html.append("<table border='1' cellspacing='0' cellpadding='3'>")
@@ -14,7 +17,7 @@ def render_bias_grid(biases, columns=4):
         for name, val in chunk:
             status = "OK"
             cell_style = ""
-            if val < 175 or val > 225:
+            if val < bias_min or val > bias_max:
                 alarm = True
                 status = "ALARM"
                 cell_style = " style='color:red'"
@@ -29,6 +32,9 @@ def render_bias_grid(biases, columns=4):
 def run_diagnostic(ate):
     lines = []
     ok = True
+    spec = DIAGNOSTIC_SPECS.get("bias")
+    bias_min = spec[2] if spec else 175
+    bias_max = spec[3] if spec else 225
     lines.append("<h3>Diagnostic summary</h3>")
     try:
         if hasattr(ate, "diagnostics"):
@@ -104,6 +110,8 @@ def run_diagnostic(ate):
         + [f"biasQ{i}" for i in range(19, 27)]
         + ["biasQ27", "biasQ28", "biasQ31", "biasQ32", "biasQ33", "biasQ34", "biasQ35"]
     )
+    excluded = set(DIAGNOSTIC_EXCLUDED_BIASES or [])
+    bias_names = [n for n in bias_names if n not in excluded]
     biases_master = {}
     alarm = False
     for name in bias_names:
@@ -122,7 +130,7 @@ def run_diagnostic(ate):
     lines.append(grid_html_slave)
     if alarm_master or alarm_slave:
         ok = False
-        lines.append("<p style='color:red;font-weight:bold'>Bias alarm: one or more values out of 200 ± 25</p>")
+        lines.append(f"<p style='color:red;font-weight:bold'>Bias alarm: one or more values out of {bias_min}–{bias_max}</p>")
     if m_fault_flag == 1 or s_fault_flag == 1:
         ok = False
         lines.append("<p style='color:red;font-weight:bold'>Fault active: please investigate error code before proceeding.</p>")
@@ -260,30 +268,60 @@ def run_performance_test(ate):
     add_result("test_id_13115", "13115", "Seq8 body output power variation", "%")
     add_result("test_id_13201", "13201", "Harmonic output", "dBc")
     add_result("test_id_13204", "13204", "Unblanked output noise power broad spectrum", "dBm/Hz")
-    if results:
-        lines.append("<table border='1' cellspacing='0' cellpadding='3'>")
-        lines.append("<tr><th>ID</th><th>Measurement</th><th>Value</th><th>Unit</th><th>Spec min</th><th>Spec max</th><th>Status</th></tr>")
-        any_fail = False
-        for test_id, label, val, unit, spec_min, spec_max, status in results:
-            row_style = ""
-            if status == "FAIL":
-                row_style = " style='color:red;font-weight:bold'"
-                any_fail = True
-            elif status == "OK":
-                row_style = " style='color:green'"
-            min_str = "" if spec_min is None else str(spec_min)
-            max_str = "" if spec_max is None else str(spec_max)
-            lines.append(
-                f"<tr{row_style}><td>{test_id}</td><td>{label}</td><td>{round(val, 2)}</td>"
-                f"<td>{unit}</td><td>{min_str}</td><td>{max_str}</td><td>{status}</td></tr>"
-            )
-        lines.append("</table>")
-        if any_fail:
-            ok = False
-            lines.append("<p style='color:red;font-weight:bold'>One or more performance measurements are out of specification.</p>")
-    else:
+    if not results:
         ok = False
         lines.append("Aucun résultat de performance n'a été renvoyé par l'ATE.")
+    else:
+        categories = {
+            "12007": "Input",
+            "13101": "Bandwidth",
+            "13102": "Bandwidth",
+            "13103": "Power",
+            "13104": "Power",
+            "13105": "Power",
+            "13106": "Gain",
+            "13107": "Gain",
+            "13108": "Stress",
+            "13109": "Stress",
+            "13110": "Stress",
+            "13111": "Stress",
+            "13112": "Stress",
+            "13113": "Stress",
+            "13114": "Stress",
+            "13115": "Stress",
+            "13201": "Harmonics",
+            "13204": "Noise",
+        }
+        ok_count = sum(1 for _, _, _, _, _, _, s in results if s == "OK")
+        fail_count = sum(1 for _, _, _, _, _, _, s in results if s == "FAIL")
+        total_count = len(results)
+        overall_style = "color: green;" if fail_count == 0 else "color: red; font-weight: bold;"
+        lines.append(f"<p style='{overall_style}'>Résumé: {ok_count} OK / {fail_count} FAIL / {total_count} Total</p>")
+        grouped = {}
+        for r in results:
+            test_id = r[0]
+            cat = categories.get(test_id, "Divers")
+            grouped.setdefault(cat, []).append(r)
+        for cat in sorted(grouped.keys()):
+            lines.append(f"<h4>{cat}</h4>")
+            lines.append("<table border='1' cellspacing='0' cellpadding='3'>")
+            lines.append("<tr><th>ID</th><th>Mesure</th><th>Valeur</th><th>Unité</th><th>Spec min</th><th>Spec max</th><th>Statut</th></tr>")
+            for test_id, label, val, unit, spec_min, spec_max, status in grouped[cat]:
+                row_style = ""
+                if status == "FAIL":
+                    row_style = " style='color:red;font-weight:bold'"
+                elif status == "OK":
+                    row_style = " style='color:green'"
+                min_str = "" if spec_min is None else str(spec_min)
+                max_str = "" if spec_max is None else str(spec_max)
+                lines.append(
+                    f"<tr{row_style}><td>{test_id}</td><td>{label}</td><td>{round(val, 2)}</td>"
+                    f"<td>{unit}</td><td>{min_str}</td><td>{max_str}</td><td>{status}</td></tr>"
+                )
+            lines.append("</table>")
+        if fail_count > 0:
+            ok = False
+            lines.append("<p style='color:red;font-weight:bold'>Une ou plusieurs mesures de performance sont hors spécification.</p>")
     lines.append("<p>Test de performance terminé.</p>")
     values = {
         "13301_single_pulse_drop_db": getattr(ate, "test_id_13301", ""),

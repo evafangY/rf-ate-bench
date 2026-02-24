@@ -82,9 +82,16 @@ class FakeATE:
         self.test_id_13110 = 2.0 + random.uniform(-0.5, 0.5)
         self.test_id_13111 = 2.0 + random.uniform(-0.5, 0.5)
         self.test_id_13112 = 2.0 + random.uniform(-0.5, 0.5)
+        self.test_id_13301 = -40.0 + random.uniform(-0.5, 0.5)
 
     def noise_unblanked_measure(self):
         self.test_id_13204 = -150.0 + random.uniform(-5.0, 5.0)
+
+    def single_pulse_measure(self):
+        self.test_id_13301 = -40.0 + random.uniform(-0.5, 0.5)
+
+    def harmonic_output_measure(self):
+        self.test_id_13201 = -35.0 + random.uniform(-2.0, 2.0)
 
 
 def main():
