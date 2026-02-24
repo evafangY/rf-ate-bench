@@ -135,10 +135,17 @@ class ate_init:
         # gui.set_status("Performing single pulse measure...", 1); self.single_pulse_measure()
         # gui.set_status("Performing harmonic output measure...", 33); self.harmonic_output_measure()
         # gui.set_status("Performing noise ublanked measure...", 67); self.noise_unblanked_measure()
-        # gui.set_status("Interpulse stability measure", 30); self.interpulse_stability_measure()
-        # gui.set_status("Gain flatness measure", 40); self.gain_flatness_measure()
-        gui.set_status("Stress sequence 1", 40); self.stress(1)
-        gui.set_status("Stress sequence 2", 80); self.stress(2)
+        # gui.set_status("Interpulse stability measure", 1); self.interpulse_stability_measure()
+        # gui.set_status("Gain flatness measure", 10); self.gain_flatness_measure()
+        # gui.set_status("Stress sequence 5", 20); self.stress(5)
+        # gui.set_status("Stress sequence 4", 30); self.stress(4)
+        # gui.set_status("Stress sequence 3", 40); self.stress(3)
+        # gui.set_status("Stress sequence 2", 50); self.stress(2)
+        # gui.set_status("Stress sequence 1", 60); self.stress(1)
+        # gui.set_status("Stress sequence 6", 70); self.stress_burst(6)
+        # gui.set_status("Stress sequence 7", 80); self.stress_burst(7)
+        # gui.set_status("Stress sequence 8", 90); self.stress_burst(8)
+        gui.set_status("Fidelity measure", 90); self.fidelity_measure()
         gui.set_status("Performance test completed", 100); time.sleep(1)
         self.poweroff()
         gui.close()
@@ -268,7 +275,6 @@ class ate_init:
             gui.set_status("Turning on blanking signals", 9); self.en.operate()
             gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
             gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
-            gui.set_status("Switching OFF VNA RF power", 10); self.vna.visa.write("OUTP OFF")
             gui.set_status("Turning off the unblanking generator", 18); self.en.poweroff()
             gui.set_status("Acquiring data from the VNA", 10); s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
             gui.set_status("Processing VNA data", 98); logging.info("VNA data acquired")
@@ -309,7 +315,6 @@ class ate_init:
             gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
             gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
             gui.set_status("Acquiring VNA data", 10); s21_raw_head = self.vna.visa.query("CALC:MEAS2:DATA:FDATa?")
-            gui.set_status("Switching OFF VNA RF power", 10); self.vna.visa.write("OUTP OFF")
             gui.set_status("Turning off the unblanking generator", 18); self.en.poweroff()
             s11 = numpy.abs(self.vna.parse_data(s11_raw))
             self.flatness_s11_mag = 20 * numpy.log10(s11)
@@ -322,8 +327,8 @@ class ate_init:
             self.test_id_13106 = numpy.mean(self.flatness_s21_mag_body)
             self.test_id_13107 = numpy.mean(self.flatness_s21_mag_head)
             logging.info("RF input match (12007): %s:1", round(self.test_id_12007, 2)) 
-            logging.info("Body gain flatness (13101): %s°", round(self.test_id_13101, 2))
-            logging.info("Head gain flatness (13102): %s°", round(self.test_id_13102, 2))
+            logging.info("Body gain flatness (13101): %s dB", round(self.test_id_13101, 2))
+            logging.info("Head gain flatness (13102): %s dB", round(self.test_id_13102, 2))
             logging.info("Body power (13106): %sdBm", round(self.test_id_13106, 2))
             logging.info("Head power (13107): %sdBm", round(self.test_id_13107, 2))
             gui.set_status("Gain flatness measure completed", 100); time.sleep(0.5)
@@ -336,7 +341,54 @@ class ate_init:
             raise
 
     def fidelity_measure(self):
-        logging.info("to be implemented")    
+        try:
+            gui = progress_window("Fidelity measure status"); logging.info("Starting fidelity measure")
+            gui.set_status("Setting the amplifier in standby", 10); self.comm.standby()
+            gui.set_status("Setting the switches", 2); self.sw.config("vna_body")
+            gui.set_status("Setting the scope", 4); self.scope.config("")
+            gui.set_status("Setting the unblanking generator", 8); self.en.config("0.2", "4.5")
+            gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_fidelity_forward)
+            gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
+            gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
+            gui.set_status("Turning on blanking signals", 9); self.en.operate()
+            gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
+            gui.set_status("Acquiring VNA data", 10); s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")  
+            self.forward_s21_mag = 20 * numpy.log10(numpy.abs(self.vna.parse_data(s21_raw)))
+            self.forward_s21_mag_diff = numpy.gradient(self.forward_s21_mag, 0.15)
+            self.forward_s21_phase = numpy.degrees(numpy.angle(self.vna.parse_data(s21_raw)))
+            self.forward_s21_phase_diff = numpy.gradient(self.forward_s21_phase, 0.15)
+            self.test_id_13205 = numpy.max(self.forward_s21_mag[133:]) - numpy.min(self.forward_s21_mag[133:])
+            self.test_id_13206 = numpy.max(self.forward_s21_mag_diff[133:380]) - numpy.min(self.forward_s21_mag_diff[133:380])
+            self.test_id_13207 = numpy.max(self.forward_s21_mag_diff[380:393]) - numpy.min(self.forward_s21_mag_diff[380:393])
+            self.test_id_13208 = numpy.max(self.forward_s21_mag_diff[393:]) - numpy.min(self.forward_s21_mag_diff[393:])
+            self.test_id_13209 = numpy.max(self.forward_s21_phase[133:]) - numpy.min(self.forward_s21_phase[133:])
+            self.test_id_13210 = numpy.max(self.forward_s21_phase_diff[133:380]) - numpy.min(self.forward_s21_phase_diff[133:380])
+            self.test_id_13211 = numpy.max(self.forward_s21_phase_diff[380:393]) - numpy.min(self.forward_s21_phase_diff[380:393])
+            self.test_id_13212 = numpy.max(self.forward_s21_phase_diff[393:]) - numpy.min(self.forward_s21_phase_diff[393:])
+            gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_fidelity_reverse)
+            gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
+            gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
+            gui.set_status("Turning off the unblanking generator", 18); self.en.poweroff()
+            gui.set_status("Acquiring VNA data", 10); s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")  
+            self.reverse_s21_mag = 20 * numpy.log10(numpy.abs(self.vna.parse_data(s21_raw)))
+            self.reverse_s21_mag_diff = numpy.gradient(self.reverse_s21_mag, 0.15)
+            self.reverse_s21_phase = numpy.degrees(numpy.angle(self.vna.parse_data(s21_raw)))
+            self.reverse_s21_phase_diff = numpy.gradient(self.reverse_s21_phase, 0.15)
+            self.test_id_13213 = numpy.max(self.reverse_s21_mag[:267]) - numpy.min(self.reverse_s21_mag[:267])
+            self.test_id_13214 = numpy.max(self.reverse_s21_mag_diff[20:267]) - numpy.min(self.reverse_s21_mag_diff[20:267])
+            self.test_id_13215 = numpy.max(self.reverse_s21_mag_diff[7:20]) - numpy.min(self.reverse_s21_mag_diff[7:20])
+            self.test_id_13216 = numpy.max(self.reverse_s21_mag_diff[:7]) - numpy.min(self.reverse_s21_mag_diff[:7])
+            self.test_id_13217 = numpy.max(self.reverse_s21_phase[:267]) - numpy.min(self.reverse_s21_phase[:267])
+            self.test_id_13218 = numpy.max(self.reverse_s21_phase_diff[20:267]) - numpy.min(self.reverse_s21_phase_diff[20:267])
+            self.test_id_13219 = numpy.max(self.reverse_s21_phase_diff[7:20]) - numpy.min(self.reverse_s21_phase_diff[7:20])
+            self.test_id_13220 = numpy.max(self.reverse_s21_phase_diff[:7]) - numpy.min(self.reverse_s21_phase_diff[:7])
+            gui.close()
+            logging.info("Fidelity measure completed")
+        except Exception:
+            gui.set_status("Error occured during fidelity measure, turning off the ATE", 0); logging.warning("Error while performing fidelity measure")
+            self.emergency_stop();
+            gui.close()
+            raise
 
     def stress(self, sequence):
         try:
@@ -370,7 +422,6 @@ class ate_init:
             gui.set_status("Turning on blanking signals", 9); self.en.operate()
             gui.set_status("Running stress sequence... (please wait 5 minute)", 10); self.vna_single()
             gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
-            gui.set_status("Switching OFF VNA RF power", 10); self.vna.visa.write("OUTP OFF")
             gui.set_status("Turning off the unblanking generator", 18); self.en.poweroff()
             gui.set_status("Acquiring data from the VNA", 10); s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
             gui.set_status("Processing VNA data", 98); logging.info("VNA data acquired")
@@ -410,7 +461,67 @@ class ate_init:
             raise
 
     def stress_burst(self, sequence):
-        logging.info("to be implemented")
+        try:
+            gui = progress_window(f"Stress burst sequence {sequence}"); logging.info("Starting stress burst sequence %s measure", sequence)
+            s21 = numpy.array([0])
+            gui.set_status("Setting the amplifier in standby", 1); self.comm.standby()
+            gui.set_status("Setting the amplifier in body mode", 1); self.comm.body()
+            gui.set_status("Making sure that the RF generator is OFF", 1); self.rf.poweroff()
+            gui.set_status("Setting the switches", 1); self.sw.config("vna_body")
+            gui.set_status("Setting the scope", 1); self.scope.config("")
+            gui.set_status("Loading VNA configuration", 1)
+            match sequence:
+                case 6:
+                    self.en.config("0.01", "20")
+                    self.vna.visa.write(ate_config.load_stress_6)
+                case 7:
+                    self.en.config("0.01", "40")
+                    self.vna.visa.write(ate_config.load_stress_7)
+                case 8:
+                    self.en.config("0.01", "60")
+                    self.vna.visa.write(ate_config.load_stress_8)
+                case _:
+                    logging.warning("Stress sequence %s unknown", sequence)
+                    raise RuntimeError(f"Stress sequence {sequence} unknown")
+            gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
+            gui.set_status("Turning on blanking signals", 9); self.en.operate()
+            gui.set_status("Running stress burst sequence... (please wait 5 minute)", 10);
+            for i in range(100):
+                gui.set_status(f"Running stress sequence ({i}/100)", int(i)); self.vna_single()
+                gui.set_status("Acquiring data from the VNA", int(10+i/2)); s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
+                s21_raw_numpy = numpy.abs(self.vna.parse_data(s21_raw))
+                if i == 1:
+                    s21 = s21_raw_numpy
+                else:
+                    s21 = numpy.append(s21, s21_raw_numpy)
+            gui.set_status("Setting the amplifier back to standby", 100); self.comm.standby()
+            gui.set_status("Turning off the unblanking generator", 100); self.en.poweroff()
+            gui.set_status("Processing VNA data", 100); logging.info("VNA data acquired")
+            stress_lin_power = s21**2 / 50
+            match sequence:
+                case 6:
+                    self.stress_6_mag = 20 * numpy.log10(s21)
+                    self.test_id_13113 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13113, 2))
+                case 7:
+                    self.stress_7_mag = 20 * numpy.log10(s21)
+                    self.test_id_13114 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13114, 2))
+                case 8:
+                    self.stress_8_mag = 20 * numpy.log10(s21)
+                    self.test_id_13115 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13115, 2))
+                case _:
+                    logging.warning("Stress sequence %s unknown", sequence)
+                    raise RuntimeError(f"Stress sequence {sequence} unknown")            
+            gui.set_status(f"Stress sequence {sequence} completed" , 100); time.sleep(0.5)
+            gui.close()
+            logging.info("Stress sequence %s completed", sequence)
+        except Exception:
+            gui.set_status(f"Error occured during stress sequence {sequence}, turning off the ATE", 0); logging.warning("Error while performing stress sequence %s measure", sequence)
+            self.emergency_stop();
+            gui.close()
+            raise
     
     def vna_single(self):
         try:
@@ -422,9 +533,11 @@ class ate_init:
                 time.sleep(1)
                 state = self.vna.visa.query("SENSe:SWEep:MODE?")
                 self.comm.update()
+            self.vna.visa.write("OUTP OFF")
             logging.info("VNA measure ready")
         except COMM_Error as comm_e:
             logging.warning("Error %s occured in the amplifier during VNA measure", hex(comm_e.code))
+            raise
         except Exception:
             logging.warning("Error while waiting for VNA to measure")
             raise ATE_Instrument_Error(self.idn) from None
