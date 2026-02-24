@@ -47,14 +47,3 @@ class SessionData:
                     }
                 )
         return rows
-
-
-PHASE_IMAGE_MAP = {
-    "Diagnostic": "Models/Pics/Master_Slave_Connection.png",
-    "Output conditional tuning": "Output_cond/Pics/Amplifier.png",
-    "Power module gain tuning": "SW_Tunning/Pics/Amplifier.png",
-    "Input conditional board tuning": "Input_cond/Pics/Amplifier.png",
-    "Performance test / burn": "Performance_burning/assets/Pics/Mesure.png",
-    "Noise blanked": "Noise_meas/Pics/Noise.jpg",
-}
-
