@@ -99,30 +99,27 @@ class ate_init:
             self.emergency_stop();
             raise
     
-    def input_gain_tuning_body (self, dBm):
+    def input_gain_tuning (self, head_body, dBm):
         try:
             self.comm.standby()
-            self.comm.body()
+            if head_body == "head":
+                self.comm.head()
+            else:
+                self.comm.body()
             self.scope.config("input_tuning")
             self.rf.config(dBm, "")
             self.rf.operate()
+            self.scope.visa.query("*OPC?")
+            time.sleep(0.5)
+            self.scope.visa.write("MEASurement1:RESult:ACTual?")
+            input1 = float(self.scope.visa.read())
+            self.scope.visa.write("MEASurement2:RESult:ACTual?")
+            input2 = float(self.scope.visa.read())
+            return input1, input2
         except Exception:
-            logging.warning("Exception occured while tuning input body gain")
+            logging.warning("Exception occured while tuning input gain")
             self.emergency_stop();
             raise
-    
-    def input_gain_tuning_head (self, dBm):
-        try:
-            self.comm.standby()
-            self.comm.head()
-            self.scope.config("input_tuning")
-            self.rf.config(dBm, "")
-            self.rf.operate()
-        except Exception:
-            logging.warning("Exception occured while tuning input head gain")
-            self.emergency_stop();
-            raise
-    
     
     """ Global tests definitions """
     def diagnostics(self):
@@ -596,10 +593,10 @@ class ate_init:
                 self.visa.write("TRIGger:ACTions:OUT:STATe ON")
                 self.visa.write("ACQuire:SRAte:MODe MAN")
                 self.visa.write("ACQuire:SRAte 5E9")
+                self.visa.write("CHANnel1:COUPling DC")
                 if str_config == "single_pulse_measure":
                     self.visa.write("TRIGger:MODE SINGLe")
                     self.visa.write("CHANnel1:BANDwidth 350E6")
-                    self.visa.write("CHANnel1:COUPling DC")
                     self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("TIMebase:SCALe 1E-3")
                     self.visa.write("TIMebase:HORizontal:POSition 0.004")
@@ -608,7 +605,6 @@ class ate_init:
                 if str_config == "harmonic_output_measure":
                     self.visa.write("TIMebase:SCALe 0.0005")
                     self.visa.write("CHANnel1:BANDwidth 350E6")
-                    self.visa.write("CHANnel1:COUPling DC")
                     self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("ACQuire:POINTs:MODE MAN")
                     self.visa.write("ACQuire:POINTs 25000000")
@@ -622,7 +618,6 @@ class ate_init:
                 if str_config == "noise_unblanked_measure":
                     self.visa.write("ACQuire:POINTs 100000000")
                     self.visa.write("CHANnel1:BANDwidth 350E6")
-                    self.visa.write("CHANnel1:COUPling DC")
                     self.visa.write("CHANnel1:SCALe 0.001")
                     self.visa.write("TIMebase:SCALe 0.002")
                     self.visa.write("TIMebase:HORizontal:POSition 0.01")
@@ -638,12 +633,12 @@ class ate_init:
                     self.visa.write("TRIGger:EVENt1:SOURce C3")
                     self.visa.write("TRIGger:EVENt1:TYPE EDGE")
                     self.visa.write("TRIGger:EVENt1:LEVel1 0")
-                    self.visa.write("CHANnel1:BANDwidth 350E6")
-                    self.visa.write("CHANnel1:COUPling DC")
                     self.visa.write("CHANnel3:STATe ON")
                     self.visa.write("CHANnel3:SCALe 0.05")
+                    self.visa.write("CHANnel3:COUPling DC")
                     self.visa.write("CHANnel4:STATe ON")
                     self.visa.write("CHANnel4:SCALe 0.05")
+                    self.visa.write("CHANnel4:COUPling DC")
                     self.visa.write("MEASurement1:MAIN CYCRms")
                     self.visa.write("MEASurement1:SOURce C3")
                     self.visa.write("MEASurement2:MAIN CYCRms")
