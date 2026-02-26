@@ -99,7 +99,7 @@ class ate_init:
             self.emergency_stop();
             raise
     
-    def input_gain_tuning (self, head_body, dBm):
+    def input_tuning (self, head_body, dBm):
         try:
             self.comm.standby()
             if head_body == "head":
@@ -117,7 +117,49 @@ class ate_init:
             input2 = float(self.scope.visa.read())
             return input1, input2
         except Exception:
-            logging.warning("Exception occured while tuning input gain")
+            logging.warning("Exception occured while tuning input")
+            self.emergency_stop();
+            raise
+            
+    def gain_tuning (self):
+        try:
+            gui = progress_window("Gain tuning status")
+            gui.set_status("Setting up...", 1)
+            self.comm.standby()
+            self.comm.body()
+            self.sw.config("scope_body")
+            self.scope.config("power")
+            self.rf.config("0", "gated")
+            self.en.config("1", "0.4")
+            self.rf.operate()
+            self.en.operate()
+            master_gain = 100
+            self.master.set_gain(master_gain)
+            master_power = self.gain_tuning_power_measure()
+            while master_power < 69.0:
+                master_gain += 1
+                self.master.set_gain(master_gain)
+                master_power = self.gain_tuning_power_measure()
+                completion = int( 10 * (master_power - 59) ) 
+                gui.set_status(f"Testing gain {master_gain}", completion)
+            logging.info("Gain successfully tuned")
+            self.poweroff()
+        except Exception:
+            logging.warning("Exception occured while tuning amplifier gain")
+            self.emergency_stop();
+            raise
+    
+    def gain_tuning_power_measure(self):
+        try:
+            self.comm.operate()
+            self.scope.single_trigger()
+            self.comm.standby()
+            self.scope.visa.write("MEASurement1:RESult:ACTual?")
+            master_power = 10 * math.log10(float(self.scope.visa.read())**2/50)+60+30
+            logging.info("Master power measured at %sdBm", round(master_power, 2))
+            return master_power
+        except Exception:
+            logging.warning("Exception occured while mesuring amplifier power")
             self.emergency_stop();
             raise
     
@@ -593,10 +635,10 @@ class ate_init:
                 self.visa.write("TRIGger:ACTions:OUT:STATe ON")
                 self.visa.write("ACQuire:SRAte:MODe MAN")
                 self.visa.write("ACQuire:SRAte 5E9")
+                self.visa.write("CHANnel1:BANDwidth 350E6")
                 self.visa.write("CHANnel1:COUPling DC")
                 if str_config == "single_pulse_measure":
                     self.visa.write("TRIGger:MODE SINGLe")
-                    self.visa.write("CHANnel1:BANDwidth 350E6")
                     self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("TIMebase:SCALe 1E-3")
                     self.visa.write("TIMebase:HORizontal:POSition 0.004")
@@ -604,7 +646,6 @@ class ate_init:
                     self.visa.write("ACQuire:POINTs 50000000")
                 if str_config == "harmonic_output_measure":
                     self.visa.write("TIMebase:SCALe 0.0005")
-                    self.visa.write("CHANnel1:BANDwidth 350E6")
                     self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("ACQuire:POINTs:MODE MAN")
                     self.visa.write("ACQuire:POINTs 25000000")
@@ -617,7 +658,6 @@ class ate_init:
                     self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.002")
                 if str_config == "noise_unblanked_measure":
                     self.visa.write("ACQuire:POINTs 100000000")
-                    self.visa.write("CHANnel1:BANDwidth 350E6")
                     self.visa.write("CHANnel1:SCALe 0.001")
                     self.visa.write("TIMebase:SCALe 0.002")
                     self.visa.write("TIMebase:HORizontal:POSition 0.01")
@@ -643,6 +683,13 @@ class ate_init:
                     self.visa.write("MEASurement1:SOURce C3")
                     self.visa.write("MEASurement2:MAIN CYCRms")
                     self.visa.write("MEASurement2:SOURce C4")
+                if str_config == "power":
+                    self.visa.write("TRIGger:MODE SINGLe")
+                    self.visa.write("CHANnel1:SCALe 0.2")
+                    self.visa.write("TIMebase:SCALe 2E-8")
+                    self.visa.write("TIMebase:HORizontal:POSition 0.002")
+                    self.visa.write("MEASurement1:MAIN CYCRms")
+                    self.visa.write("MEASurement1:SOURce C1")
                 self.visa.query("*OPC?")
                 logging.info("Scope configured")
             except Exception:
@@ -973,6 +1020,7 @@ class ate_init:
             time.sleep(0.1)
             self.visa.read()
             time.sleep(0.1)
+            logging.info("%s gain set to %s", self.name, gain)
             
         def help(self):
             self.password()

@@ -11,19 +11,19 @@ try:
     
     """ high level test launch """
     
-    input1, input2 = ate.input_gain_tuning("body", "10")
+    input1, input2 = ate.input_tuning("body", "0")
     print("input1:", round(input1, 3), "input2:", round(input2, 3))
     while not(0.133 < input1 < 0.137) and not(0.133 < input2 < 0.137):
         input("Tune the body gain until the scope measure 135mV RMS, then press enter...")
-        input1, input2 = ate.input_gain_tuning("body", "10")
+        input1, input2 = ate.input_tuning("body", "0")
         print("input1:", round(input1, 3), "input2:", round(input2, 3))
     
     
-    input1, input2 = ate.input_gain_tuning("head", "10")
+    input1, input2 = ate.input_tuning("head", "0")
     print("input1:", round(input1, 3), "input2:", round(input2, 3))
     while not(0.045 < input1 < 0.049) and not(0.045 < input2 < 0.049):
         input("Tune the head gain until the scope measure 47mV RMS, then press enter...")
-        input1, input2 = ate.input_gain_tuning("head", "10")
+        input1, input2 = ate.input_tuning("head", "0")
         print("input1:", round(input1, 3), "input2:", round(input2, 3))
     
     ate.poweroff()
