@@ -99,6 +99,31 @@ class ate_init:
             self.emergency_stop();
             raise
     
+    def input_gain_tuning_body (self, dBm):
+        try:
+            self.comm.standby()
+            self.comm.body()
+            self.scope.config("input_tuning")
+            self.rf.config(dBm, "")
+            self.rf.operate()
+        except Exception:
+            logging.warning("Exception occured while tuning input body gain")
+            self.emergency_stop();
+            raise
+    
+    def input_gain_tuning_head (self, dBm):
+        try:
+            self.comm.standby()
+            self.comm.head()
+            self.scope.config("input_tuning")
+            self.rf.config(dBm, "")
+            self.rf.operate()
+        except Exception:
+            logging.warning("Exception occured while tuning input head gain")
+            self.emergency_stop();
+            raise
+    
+    
     """ Global tests definitions """
     def diagnostics(self):
         try:
@@ -112,7 +137,7 @@ class ate_init:
             logging.warning("Exception occured during diagnostics")
             self.emergency_stop();
             raise
-        
+    
     def force_update(self):
         try:
             self.comm.update()
@@ -158,7 +183,7 @@ class ate_init:
             gui.set_status("Setting the switches", 1); self.sw.config("scope_body")
             gui.set_status("Setting the scope", 3); self.scope.config("single_pulse_measure")
             gui.set_status("Setting the unblanking generator", 6); self.en.config("1", "0.8")
-            gui.set_status("Setting the RF generator", 9); self.rf.config("0")
+            gui.set_status("Setting the RF generator", 9); self.rf.config("0", "gated")
             gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
             gui.set_status("Setting the amplifier in operate", 12); self.comm.operate()
             gui.set_status("Turning on input signals", 15); self.rf.operate(); self.en.operate()
@@ -198,7 +223,7 @@ class ate_init:
             gui.set_status("Setting the switches", 1); self.sw.config("scope_body")
             gui.set_status("Setting the scope", 5); self.scope.config("harmonic_output_measure")
             gui.set_status("Setting the unblanking generator", 10); self.en.config("1", "0.8")
-            gui.set_status("Setting the RF generator", 15); self.rf.config("0")
+            gui.set_status("Setting the RF generator", 15); self.rf.config("0", "gated")
             gui.set_status("Setting the amplifier in body mode", 19); self.comm.body()
             gui.set_status("Setting the amplifier in operate", 20); self.comm.operate()
             gui.set_status("Turning on input signals", 25); self.rf.operate(); self.en.operate()
@@ -562,11 +587,6 @@ class ate_init:
             try:
                 logging.info("Configuring scope...")
                 self.visa.write("*RST")
-                self.visa.write("CHANnel1:BANDwidth 350E6")
-                self.visa.write("CHANnel1:COUPling DC")
-                self.visa.write("CHANnel1:SCALe 0.4")
-                self.visa.write("TIMebase:SCALe 1E-3")
-                self.visa.write("TIMebase:HORizontal:POSition 0.004")
                 self.visa.write("TRIGger:MODE NORMal")
                 self.visa.write("TRIGger:ANEDge:LEVel 0.8")
                 self.visa.write("TRIGger:ANEDge:COUPling DC")
@@ -576,16 +596,20 @@ class ate_init:
                 self.visa.write("TRIGger:ACTions:OUT:STATe ON")
                 self.visa.write("ACQuire:SRAte:MODe MAN")
                 self.visa.write("ACQuire:SRAte 5E9")
-                self.visa.write("ACQuire:POINTs:MODE MAN")
-                self.visa.write("ACQuire:POINTs 50000000")
-                
-                # self.visa.write("CHANnel4:STATe ON")
-                # self.visa.write("CHANnel4:SCALe 0.5")
-                
                 if str_config == "single_pulse_measure":
                     self.visa.write("TRIGger:MODE SINGLe")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
+                    self.visa.write("CHANnel1:SCALe 0.4")
+                    self.visa.write("TIMebase:SCALe 1E-3")
+                    self.visa.write("TIMebase:HORizontal:POSition 0.004")
+                    self.visa.write("ACQuire:POINTs:MODE MAN")
+                    self.visa.write("ACQuire:POINTs 50000000")
                 if str_config == "harmonic_output_measure":
                     self.visa.write("TIMebase:SCALe 0.0005")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
+                    self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("ACQuire:POINTs:MODE MAN")
                     self.visa.write("ACQuire:POINTs 25000000")
                     self.visa.write("TRIGger:MODE SINGLe")
@@ -597,6 +621,8 @@ class ate_init:
                     self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.002")
                 if str_config == "noise_unblanked_measure":
                     self.visa.write("ACQuire:POINTs 100000000")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
                     self.visa.write("CHANnel1:SCALe 0.001")
                     self.visa.write("TIMebase:SCALe 0.002")
                     self.visa.write("TIMebase:HORizontal:POSition 0.01")
@@ -608,6 +634,20 @@ class ate_init:
                     self.visa.write("CALCulate:SPECtrum1:GATE:POSition 0.01")
                     self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.02")
                     self.visa.write("TRIGger:MODE SINGLe")
+                if str_config == "input_tuning":
+                    self.visa.write("TRIGger:EVENt1:SOURce C3")
+                    self.visa.write("TRIGger:EVENt1:TYPE EDGE")
+                    self.visa.write("TRIGger:EVENt1:LEVel1 0")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
+                    self.visa.write("CHANnel3:STATe ON")
+                    self.visa.write("CHANnel3:SCALe 0.05")
+                    self.visa.write("CHANnel4:STATe ON")
+                    self.visa.write("CHANnel4:SCALe 0.05")
+                    self.visa.write("MEASurement1:MAIN CYCRms")
+                    self.visa.write("MEASurement1:SOURce C3")
+                    self.visa.write("MEASurement2:MAIN CYCRms")
+                    self.visa.write("MEASurement2:SOURce C4")
                 self.visa.query("*OPC?")
                 logging.info("Scope configured")
             except Exception:
@@ -740,18 +780,20 @@ class ate_init:
                 logging.warning("Exception occured while turning on the RF generator")
                 raise ATE_Instrument_Error(self.idn) from None
         
-        def config (self, dBm):
+        def config (self, dBm, gated):
             try:
+                power = float(dBm) + ate_config.rf_loss
                 logging.info("Configuring RF generator... ")
                 self.visa.write("*RST")
                 self.visa.write("OUTPut1:LOAD 50")
                 self.visa.write("SOURce1:FUNCtion SIN")
                 self.visa.write("SOURCE1:FREQUENCY 63860000")
                 self.visa.write("SOURCE1:VOLT:UNIT DBM")
-                self.visa.write(f"SOURCE1:VOLT {dBm}")
-                self.visa.write("SOURCE1:BURST:MODE GAT")
-                self.visa.write("SOURCE1:BURST:STATE ON")
-                self.visa.write("TRIGger1:DELay 1E-4")
+                self.visa.write(f"SOURCE1:VOLT {power}")
+                if gated == "gated":
+                    self.visa.write("SOURCE1:BURST:MODE GAT")
+                    self.visa.write("SOURCE1:BURST:STATE ON")
+                    self.visa.write("TRIGger1:DELay 1E-4")
                 self.visa.query("*OPC?")
                 logging.info("RF generator ON")
             except Exception:

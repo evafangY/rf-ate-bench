@@ -20,3 +20,8 @@ load_stress_5 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\stres
 load_stress_6 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\stress_6.csa"'
 load_stress_7 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\stress_7.csa"'
 load_stress_8 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ate_lib_AN8103\vna_files\stress_8.csa"'
+
+""" cables losses """
+rf_loss = 0.0
+scope_head_loss = 0.0
+scope_body_loss = 0.0
