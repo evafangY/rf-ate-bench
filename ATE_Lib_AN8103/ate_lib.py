@@ -427,26 +427,27 @@ class ate_init:
             gui.set_status("Processing VNA data", 98); logging.info("VNA data acquired")
             s21 = numpy.abs(self.vna.parse_data(s21_raw))[30:]
             stress_lin_power = s21**2 / 50
+            percent = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / (numpy.max(stress_lin_power) + numpy.min(stress_lin_power)) * 100
             match sequence:
                 case 1:
                     self.stress_1_mag = 20 * numpy.log10(s21)
-                    self.test_id_13108 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13108 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13108, 2))
                 case 2:
                     self.stress_2_mag = 20 * numpy.log10(s21)
-                    self.test_id_13109 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13109 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13109, 2))
                 case 3:
                     self.stress_3_mag = 20 * numpy.log10(s21)
-                    self.test_id_13110 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13110 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13110, 2))
                 case 4:
                     self.stress_4_mag = 20 * numpy.log10(s21)
-                    self.test_id_13111 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13111 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13111, 2))
                 case 5:
                     self.stress_5_mag = 20 * numpy.log10(s21)
-                    self.test_id_13112 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13112 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13112, 2))
                 case _:
                     logging.warning("Stress sequence %s unknown", sequence)
@@ -498,18 +499,19 @@ class ate_init:
             gui.set_status("Turning off the unblanking generator", 100); self.en.poweroff()
             gui.set_status("Processing VNA data", 100); logging.info("VNA data acquired")
             stress_lin_power = s21**2 / 50
+            percent = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / (numpy.max(stress_lin_power) + numpy.min(stress_lin_power)) * 100
             match sequence:
                 case 6:
                     self.stress_6_mag = 20 * numpy.log10(s21)
-                    self.test_id_13113 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13113 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13113, 2))
                 case 7:
                     self.stress_7_mag = 20 * numpy.log10(s21)
-                    self.test_id_13114 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13114 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13114, 2))
                 case 8:
                     self.stress_8_mag = 20 * numpy.log10(s21)
-                    self.test_id_13115 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13115 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13115, 2))
                 case _:
                     logging.warning("Stress sequence %s unknown", sequence)
