@@ -99,6 +99,31 @@ class ate_init:
             self.emergency_stop();
             raise
     
+    def input_gain_tuning_body (self, dBm):
+        try:
+            self.comm.standby()
+            self.comm.body()
+            self.scope.config("input_tuning")
+            self.rf.config(dBm, "")
+            self.rf.operate()
+        except Exception:
+            logging.warning("Exception occured while tuning input body gain")
+            self.emergency_stop();
+            raise
+    
+    def input_gain_tuning_head (self, dBm):
+        try:
+            self.comm.standby()
+            self.comm.head()
+            self.scope.config("input_tuning")
+            self.rf.config(dBm, "")
+            self.rf.operate()
+        except Exception:
+            logging.warning("Exception occured while tuning input head gain")
+            self.emergency_stop();
+            raise
+    
+    
     """ Global tests definitions """
     def diagnostics(self):
         try:
@@ -112,7 +137,7 @@ class ate_init:
             logging.warning("Exception occured during diagnostics")
             self.emergency_stop();
             raise
-        
+    
     def force_update(self):
         try:
             self.comm.update()
@@ -132,20 +157,20 @@ class ate_init:
     
     def performance_test (self):
         gui = progress_window("Performance test status", 1420,10,10); logging.info("starting performance test")
-        # gui.set_status("Performing single pulse measure...", 1); self.single_pulse_measure()
-        # gui.set_status("Performing harmonic output measure...", 33); self.harmonic_output_measure()
-        # gui.set_status("Performing noise ublanked measure...", 67); self.noise_unblanked_measure()
-        # gui.set_status("Interpulse stability measure", 1); self.interpulse_stability_measure()
-        # gui.set_status("Gain flatness measure", 10); self.gain_flatness_measure()
-        # gui.set_status("Stress sequence 5", 20); self.stress(5)
-        # gui.set_status("Stress sequence 4", 30); self.stress(4)
-        # gui.set_status("Stress sequence 3", 40); self.stress(3)
-        # gui.set_status("Stress sequence 2", 50); self.stress(2)
-        # gui.set_status("Stress sequence 1", 60); self.stress(1)
-        # gui.set_status("Stress sequence 6", 70); self.stress_burst(6)
-        # gui.set_status("Stress sequence 7", 80); self.stress_burst(7)
-        # gui.set_status("Stress sequence 8", 90); self.stress_burst(8)
-        gui.set_status("Fidelity measure", 90); self.fidelity_measure()
+        gui.set_status("Performing single pulse measure...", 1); self.single_pulse_measure()
+        gui.set_status("Performing harmonic output measure...", 3); self.harmonic_output_measure()
+        gui.set_status("Performing noise ublanked measure...", 5); self.noise_unblanked_measure()
+        gui.set_status("Interpulse stability measure", 7); self.interpulse_stability_measure()
+        gui.set_status("Gain flatness measure", 9); self.gain_flatness_measure()
+        gui.set_status("Fidelity measure", 11); self.fidelity_measure()
+        gui.set_status("Stress sequence 5", 17); self.stress(5)
+        gui.set_status("Stress sequence 4", 27); self.stress(4)
+        gui.set_status("Stress sequence 3", 37); self.stress(3)
+        gui.set_status("Stress sequence 2", 47); self.stress(2)
+        gui.set_status("Stress sequence 1", 57); self.stress(1)
+        gui.set_status("Stress sequence 6", 67); self.stress_burst(6)
+        gui.set_status("Stress sequence 7", 77); self.stress_burst(7)
+        gui.set_status("Stress sequence 8", 87); self.stress_burst(8)
         gui.set_status("Performance test completed", 100); time.sleep(1)
         self.poweroff()
         gui.close()
@@ -158,7 +183,7 @@ class ate_init:
             gui.set_status("Setting the switches", 1); self.sw.config("scope_body")
             gui.set_status("Setting the scope", 3); self.scope.config("single_pulse_measure")
             gui.set_status("Setting the unblanking generator", 6); self.en.config("1", "0.8")
-            gui.set_status("Setting the RF generator", 9); self.rf.config("0")
+            gui.set_status("Setting the RF generator", 9); self.rf.config("0", "gated")
             gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
             gui.set_status("Setting the amplifier in operate", 12); self.comm.operate()
             gui.set_status("Turning on input signals", 15); self.rf.operate(); self.en.operate()
@@ -198,7 +223,7 @@ class ate_init:
             gui.set_status("Setting the switches", 1); self.sw.config("scope_body")
             gui.set_status("Setting the scope", 5); self.scope.config("harmonic_output_measure")
             gui.set_status("Setting the unblanking generator", 10); self.en.config("1", "0.8")
-            gui.set_status("Setting the RF generator", 15); self.rf.config("0")
+            gui.set_status("Setting the RF generator", 15); self.rf.config("0", "gated")
             gui.set_status("Setting the amplifier in body mode", 19); self.comm.body()
             gui.set_status("Setting the amplifier in operate", 20); self.comm.operate()
             gui.set_status("Turning on input signals", 25); self.rf.operate(); self.en.operate()
@@ -427,26 +452,27 @@ class ate_init:
             gui.set_status("Processing VNA data", 98); logging.info("VNA data acquired")
             s21 = numpy.abs(self.vna.parse_data(s21_raw))[30:]
             stress_lin_power = s21**2 / 50
+            percent = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / (numpy.max(stress_lin_power) + numpy.min(stress_lin_power)) * 100
             match sequence:
                 case 1:
                     self.stress_1_mag = 20 * numpy.log10(s21)
-                    self.test_id_13108 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13108 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13108, 2))
                 case 2:
                     self.stress_2_mag = 20 * numpy.log10(s21)
-                    self.test_id_13109 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13109 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13109, 2))
                 case 3:
                     self.stress_3_mag = 20 * numpy.log10(s21)
-                    self.test_id_13110 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13110 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13110, 2))
                 case 4:
                     self.stress_4_mag = 20 * numpy.log10(s21)
-                    self.test_id_13111 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13111 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13111, 2))
                 case 5:
                     self.stress_5_mag = 20 * numpy.log10(s21)
-                    self.test_id_13112 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13112 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13112, 2))
                 case _:
                     logging.warning("Stress sequence %s unknown", sequence)
@@ -498,18 +524,19 @@ class ate_init:
             gui.set_status("Turning off the unblanking generator", 100); self.en.poweroff()
             gui.set_status("Processing VNA data", 100); logging.info("VNA data acquired")
             stress_lin_power = s21**2 / 50
+            percent = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / (numpy.max(stress_lin_power) + numpy.min(stress_lin_power)) * 100
             match sequence:
                 case 6:
                     self.stress_6_mag = 20 * numpy.log10(s21)
-                    self.test_id_13113 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13113 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13113, 2))
                 case 7:
                     self.stress_7_mag = 20 * numpy.log10(s21)
-                    self.test_id_13114 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13114 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13114, 2))
                 case 8:
                     self.stress_8_mag = 20 * numpy.log10(s21)
-                    self.test_id_13115 = (numpy.max(stress_lin_power) - numpy.min(stress_lin_power)) / numpy.min(stress_lin_power) * 100
+                    self.test_id_13115 = percent
                     logging.info("Stress sequence %s gain variation: %s%%", sequence, round(self.test_id_13115, 2))
                 case _:
                     logging.warning("Stress sequence %s unknown", sequence)
@@ -560,11 +587,6 @@ class ate_init:
             try:
                 logging.info("Configuring scope...")
                 self.visa.write("*RST")
-                self.visa.write("CHANnel1:BANDwidth 350E6")
-                self.visa.write("CHANnel1:COUPling DC")
-                self.visa.write("CHANnel1:SCALe 0.4")
-                self.visa.write("TIMebase:SCALe 1E-3")
-                self.visa.write("TIMebase:HORizontal:POSition 0.004")
                 self.visa.write("TRIGger:MODE NORMal")
                 self.visa.write("TRIGger:ANEDge:LEVel 0.8")
                 self.visa.write("TRIGger:ANEDge:COUPling DC")
@@ -574,16 +596,20 @@ class ate_init:
                 self.visa.write("TRIGger:ACTions:OUT:STATe ON")
                 self.visa.write("ACQuire:SRAte:MODe MAN")
                 self.visa.write("ACQuire:SRAte 5E9")
-                self.visa.write("ACQuire:POINTs:MODE MAN")
-                self.visa.write("ACQuire:POINTs 50000000")
-                
-                # self.visa.write("CHANnel4:STATe ON")
-                # self.visa.write("CHANnel4:SCALe 0.5")
-                
                 if str_config == "single_pulse_measure":
                     self.visa.write("TRIGger:MODE SINGLe")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
+                    self.visa.write("CHANnel1:SCALe 0.4")
+                    self.visa.write("TIMebase:SCALe 1E-3")
+                    self.visa.write("TIMebase:HORizontal:POSition 0.004")
+                    self.visa.write("ACQuire:POINTs:MODE MAN")
+                    self.visa.write("ACQuire:POINTs 50000000")
                 if str_config == "harmonic_output_measure":
                     self.visa.write("TIMebase:SCALe 0.0005")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
+                    self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("ACQuire:POINTs:MODE MAN")
                     self.visa.write("ACQuire:POINTs 25000000")
                     self.visa.write("TRIGger:MODE SINGLe")
@@ -594,6 +620,9 @@ class ate_init:
                     self.visa.write("CALCulate:SPECtrum1:GATE:POSition 0.004")
                     self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.002")
                 if str_config == "noise_unblanked_measure":
+                    self.visa.write("ACQuire:POINTs 100000000")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
                     self.visa.write("CHANnel1:SCALe 0.001")
                     self.visa.write("TIMebase:SCALe 0.002")
                     self.visa.write("TIMebase:HORizontal:POSition 0.01")
@@ -605,6 +634,20 @@ class ate_init:
                     self.visa.write("CALCulate:SPECtrum1:GATE:POSition 0.01")
                     self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.02")
                     self.visa.write("TRIGger:MODE SINGLe")
+                if str_config == "input_tuning":
+                    self.visa.write("TRIGger:EVENt1:SOURce C3")
+                    self.visa.write("TRIGger:EVENt1:TYPE EDGE")
+                    self.visa.write("TRIGger:EVENt1:LEVel1 0")
+                    self.visa.write("CHANnel1:BANDwidth 350E6")
+                    self.visa.write("CHANnel1:COUPling DC")
+                    self.visa.write("CHANnel3:STATe ON")
+                    self.visa.write("CHANnel3:SCALe 0.05")
+                    self.visa.write("CHANnel4:STATe ON")
+                    self.visa.write("CHANnel4:SCALe 0.05")
+                    self.visa.write("MEASurement1:MAIN CYCRms")
+                    self.visa.write("MEASurement1:SOURce C3")
+                    self.visa.write("MEASurement2:MAIN CYCRms")
+                    self.visa.write("MEASurement2:SOURce C4")
                 self.visa.query("*OPC?")
                 logging.info("Scope configured")
             except Exception:
@@ -737,18 +780,20 @@ class ate_init:
                 logging.warning("Exception occured while turning on the RF generator")
                 raise ATE_Instrument_Error(self.idn) from None
         
-        def config (self, dBm):
+        def config (self, dBm, gated):
             try:
+                power = float(dBm) + ate_config.rf_loss
                 logging.info("Configuring RF generator... ")
                 self.visa.write("*RST")
                 self.visa.write("OUTPut1:LOAD 50")
                 self.visa.write("SOURce1:FUNCtion SIN")
                 self.visa.write("SOURCE1:FREQUENCY 63860000")
                 self.visa.write("SOURCE1:VOLT:UNIT DBM")
-                self.visa.write(f"SOURCE1:VOLT {dBm}")
-                self.visa.write("SOURCE1:BURST:MODE GAT")
-                self.visa.write("SOURCE1:BURST:STATE ON")
-                self.visa.write("TRIGger1:DELay 1E-4")
+                self.visa.write(f"SOURCE1:VOLT {power}")
+                if gated == "gated":
+                    self.visa.write("SOURCE1:BURST:MODE GAT")
+                    self.visa.write("SOURCE1:BURST:STATE ON")
+                    self.visa.write("TRIGger1:DELay 1E-4")
                 self.visa.query("*OPC?")
                 logging.info("RF generator ON")
             except Exception:
