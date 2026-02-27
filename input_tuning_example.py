@@ -12,20 +12,20 @@ try:
     """ high level test launch """
     
     input1, input2 = ate.input_tuning("body", "0")
-    print("input1:", round(input1, 3), "input2:", round(input2, 3))
-    while not(0.133 < input1 < 0.137) and not(0.133 < input2 < 0.137):
-        input("Tune the body gain until the scope measure 135mV RMS, then press enter...")
+    print("input1:", round(input1, 2), "input2:", round(input2, 2))
+    while not(-4.85 < input1 < -3.85) and not(-4.85 < input2 < -3.85):
+        input("Tune the body gain until the scope measure 132mV RMS (-4.35dBm), then press enter...")
         input1, input2 = ate.input_tuning("body", "0")
-        print("input1:", round(input1, 3), "input2:", round(input2, 3))
-    
+        print("input1:", round(input1, 3), "input2:", round(input2, 2))
+    print("body input good")
     
     input1, input2 = ate.input_tuning("head", "0")
-    print("input1:", round(input1, 3), "input2:", round(input2, 3))
-    while not(0.045 < input1 < 0.049) and not(0.045 < input2 < 0.049):
-        input("Tune the head gain until the scope measure 47mV RMS, then press enter...")
+    print("input1:", round(input1, 2), "input2:", round(input2, 2))
+    while not(-13.85 < input1 < -12.85) and not(-13.85 < input2 < -12.85):
+        input("Tune the head gain until the scope measure 47mV RMS (-13.35dBm), then press enter...")
         input1, input2 = ate.input_tuning("head", "0")
-        print("input1:", round(input1, 3), "input2:", round(input2, 3))
-    
+        print("input1:", round(input1, 2), "input2:", round(input2, 2))
+    print("head input good")
     ate.poweroff()
     
     

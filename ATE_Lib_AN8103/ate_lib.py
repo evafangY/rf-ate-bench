@@ -112,9 +112,9 @@ class ate_init:
             self.scope.visa.query("*OPC?")
             time.sleep(0.5)
             self.scope.visa.write("MEASurement1:RESult:ACTual?")
-            input1 = float(self.scope.visa.read())
+            input1 = 10 * math.log10(float(self.scope.visa.read())**2/50) + 0.2 + 30
             self.scope.visa.write("MEASurement2:RESult:ACTual?")
-            input2 = float(self.scope.visa.read())
+            input2 = 10 * math.log10(float(self.scope.visa.read())**2/50) + 0.2 + 30
             return input1, input2
         except Exception:
             logging.warning("Exception occured while tuning input")
@@ -140,20 +140,21 @@ class ate_init:
             master_power = self.gain_tuning_power_measure("body")
             while master_power < 69.0:
                 master_gain += 1
+                completion = int( 10 * (master_power - 64) ) 
                 gui.set_status(f"Testing gain {master_gain} on master amp", completion)
                 self.master.set_gain(master_gain)
                 master_power = self.gain_tuning_power_measure("body")
-                completion = int( 10 * (master_power - 64) ) 
             self.sw.config("scope_head")
             slave_power = self.gain_tuning_power_measure("body")
             while slave_power < 69.0:
                 slave_gain += 1
+                completion = int( 10 * (slave_power - 64) + 50 ) 
                 gui.set_status(f"Testing gain {slave_gain} on slave amp", completion)
                 self.slave.set_gain(slave_gain)
                 slave_power = self.gain_tuning_power_measure("body")
-                completion = int( 10 * (slave_power - 64) + 50 ) 
             logging.info("Gain successfully tuned")
             self.poweroff()
+            return master_power, slave_power
         except Exception:
             logging.warning("Exception occured while tuning amplifier gain")
             self.emergency_stop();
@@ -185,7 +186,7 @@ class ate_init:
             self.force_update()
             self.comm.standby()
             self.force_update()
-            self.comm.poweroff()
+            # self.comm.poweroff()
         except COMM_Error as comm_e:
             logging.warning("Error %s occured during diagnostics", hex(comm_e.code))
         except Exception:
