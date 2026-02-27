@@ -13,23 +13,13 @@ try:
     ate = ate_init()
     
     """ high level test launch """
-    ate.interpulse_stability_measure()
-    ate.gain_flatness_measure()
-    ate.fidelity_measure()
-    ate.stress(5)
-    ate.stress(4)
-    ate.stress(3)
-    ate.stress(2)
-    ate.stress(1)
-    ate.stress_burst(6)
-    ate.stress_burst(7)
-    ate.stress_burst(8)
+    ate.performance_test()
     
-    # """ reading test results """
-    # test_id_13301 = ate.test_id_13301
-    # test_id_13201 = ate.test_id_13201
-    # test_id_13204 = ate.test_id_13204
     
+    """ reading test results """
+    test_id_13301 = ate.test_id_13301
+    test_id_13201 = ate.test_id_13201
+    test_id_13204 = ate.test_id_13204
     test_id_12007 = ate.test_id_12007
     test_id_13101 = ate.test_id_13101
     test_id_13102 = ate.test_id_13102
@@ -63,14 +53,12 @@ try:
     test_id_13303 = ate.test_id_13303
     
     
-    # """ printing result in terminal """
-    # print("")
-    # print("MAIN:")
-    # print("\033[36mSingle pulse drop (13301):", round(test_id_13301, 2), "dB\033[0m")
-    # print("\033[36mHarmonic output (13201):  ", round(test_id_13201, 2), "dB\033[0m")
-    # print("\033[36mNoise unblanked (13204):  ", round(test_id_13204, 2), "dBm/Hz\033[0m")
-    
-    
+    """ printing result in terminal """
+    print("")
+    print("MAIN:")
+    print("\033[36mSingle pulse drop (13301):", round(test_id_13301, 2), "dB\033[0m")
+    print("\033[36mHarmonic output (13201):  ", round(test_id_13201, 2), "dB\033[0m")
+    print("\033[36mNoise unblanked (13204):  ", round(test_id_13204, 2), "dBm/Hz\033[0m")
     print("\033[36mGain inter pulse stability (13302):", round(test_id_13302, 2), "dB\033[0m")
     print("\033[36mPhase inter pulse stability (13303):", round(test_id_13303, 2), "°\033[0m")
     print("\033[36mRF input match (12007):", round(test_id_12007, 2), ":1\033[0m")
