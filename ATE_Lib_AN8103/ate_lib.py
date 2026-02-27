@@ -135,13 +135,23 @@ class ate_init:
             self.en.operate()
             master_gain = 100
             self.master.set_gain(master_gain)
-            master_power = self.gain_tuning_power_measure()
+            slave_gain = 100
+            self.slave.set_gain(slave_gain)
+            master_power = self.gain_tuning_power_measure("body")
             while master_power < 69.0:
                 master_gain += 1
+                gui.set_status(f"Testing gain {master_gain} on master amp", completion)
                 self.master.set_gain(master_gain)
-                master_power = self.gain_tuning_power_measure()
-                completion = int( 10 * (master_power - 59) ) 
-                gui.set_status(f"Testing gain {master_gain}", completion)
+                master_power = self.gain_tuning_power_measure("body")
+                completion = int( 10 * (master_power - 64) ) 
+            self.sw.config("scope_head")
+            slave_power = self.gain_tuning_power_measure("body")
+            while slave_power < 69.0:
+                slave_gain += 1
+                gui.set_status(f"Testing gain {slave_gain} on slave amp", completion)
+                self.slave.set_gain(slave_gain)
+                slave_power = self.gain_tuning_power_measure("body")
+                completion = int( 10 * (slave_power - 64) + 50 ) 
             logging.info("Gain successfully tuned")
             self.poweroff()
         except Exception:
@@ -149,15 +159,21 @@ class ate_init:
             self.emergency_stop();
             raise
     
-    def gain_tuning_power_measure(self):
+    def gain_tuning_power_measure(self, body_head):
         try:
             self.comm.operate()
             self.scope.single_trigger()
             self.comm.standby()
             self.scope.visa.write("MEASurement1:RESult:ACTual?")
-            master_power = 10 * math.log10(float(self.scope.visa.read())**2/50)+60+30
-            logging.info("Master power measured at %sdBm", round(master_power, 2))
-            return master_power
+            power = 10 * math.log10(float(self.scope.visa.read())**2/50)+ate_config.scope_body_loss+30
+            if body_head == "body":
+                power_calibrated = power + ate_config.scope_body_loss
+            elif body_head == "head":
+                power_calibrated = power + ate_config.scope_head_loss
+            else:
+                power_calibrated = power + 60
+            logging.info("Power measured at %sdBm", round(power, 2))
+            return power
         except Exception:
             logging.warning("Exception occured while mesuring amplifier power")
             self.emergency_stop();
@@ -245,7 +261,7 @@ class ate_init:
             max_rms = numpy.max(raw_data)
             self.test_id_13301 = 20 * math.log10(max_rms / min_rms)
             logging.info("Single pulse drop (13301):%s dB", round(self.test_id_13301, 2))
-            logging.info("power during single pulse drop: %s dBm", round(10 * math.log10(numpy.mean(raw_data)**2/50)+60+30, 2))
+            logging.info("power during single pulse drop: %s dBm", round(10 * math.log10(numpy.mean(raw_data)**2/50)+ate_config.scope_body_loss+30, 2))
             gui.set_status("Single pulse measure completed", 100); time.sleep(0.5)
             gui.close()
             logging.info("Single pulse measure completed")
@@ -314,7 +330,7 @@ class ate_init:
             gui.set_status("Processing scope data", 90); logging.info("Scope data acquired")
             data_fft = [float(val) for val in raw_fft.strip().split(',')]
             fft_data_array_harmonic = numpy.array(data_fft)
-            self.test_id_13204 = numpy.mean(fft_data_array_harmonic)-21.76+60 # a 60 dB coupler is used, subtract LNA gain, -21.76dB to nomalize to dBm/1Hz
+            self.test_id_13204 = numpy.mean(fft_data_array_harmonic)-21.76+ate_config.scope_body_loss # -21.76dB to nomalize to dBm/1Hz
             logging.info("Noise unblanked (13204): %s dBm/Hz", round(self.test_id_13204, 2))
             gui.set_status("Unblanked noise measure completed", 100); time.sleep(0.5)
             gui.close()
@@ -324,7 +340,39 @@ class ate_init:
             self.emergency_stop();
             gui.close()
             raise
-            
+    
+    def noise_blanked_measure (self):
+        try:
+            gui = progress_window("Blanked noise measure status"); logging.info("Starting blanked noise measure")
+            gui.set_status("Setting the amplifier in standy", 32); self.comm.standby()
+            gui.set_status("Setting the switches", 10); self.sw.config("scope_body")
+            gui.set_status("Making sure that the RF generator is OFF", 1); self.rf.poweroff()
+            gui.set_status("Setting the scope", 20); self.scope.config("noise_blanked_measure")
+            gui.set_status("Making sure that the unblanking generator is OFF", 30); self.en.poweroff()
+            gui.set_status("Setting the amplifier in body mode", 39); self.comm.body()
+            gui.set_status("Setting the amplifier in operate", 40); self.comm.operate()
+            gui.set_status("Triggering the scope...", 50); self.scope.single_trigger()
+            gui.set_status("Setting the amplifier back to standby", 60); self.comm.standby()
+            gui.set_status("Acquiring data from the scope...", 80); logging.info("Acquiring data from the scope...")
+            self.scope.visa.write("FORM ASC")
+            self.scope.visa.write("CALCulate:SPECtrum1:WAVeform:NORMal:DATA:VALues?")
+            raw_fft = self.scope.visa.read()
+            gui.set_status("Processing scope data", 90); logging.info("Scope data acquired")
+            data_fft = [float(val) for val in raw_fft.strip().split(',')]
+            fft_data_array_harmonic = numpy.array(data_fft)
+            self.test_id_13202 = numpy.max(fft_data_array_harmonic)-21.76 # -21.76dB to nomalize to dBm/1Hz
+            self.test_id_13203 = numpy.mean(fft_data_array_harmonic)-21.76 # -21.76dB to nomalize to dBm/1Hz
+            logging.info("Coherent noise blanked (13202): %s dBm/Hz", round(self.test_id_13202, 2))
+            logging.info("Random noise blanked (13203): %s dBm/Hz", round(self.test_id_13203, 2))
+            gui.set_status("Blanked noise measure completed", 100); time.sleep(0.5)
+            gui.close()
+            logging.info("Blanked noise measure completed")
+        except Exception:
+            gui.set_status("Error occured, turning off the ATE", 0); logging.warning("Error while performing noise blanked measure")
+            self.emergency_stop();
+            gui.close()
+            raise
+    
     def interpulse_stability_measure (self):
         try:
             gui = progress_window("Interpulse stability measure status"); logging.info("Starting interpulse stability measure")
@@ -364,7 +412,7 @@ class ate_init:
             gui.set_status("Setting the switches", 2); self.sw.config("vna_body")
             gui.set_status("Setting the scope", 4); self.scope.config("")
             gui.set_status("Setting the unblanking generator", 8); self.en.config("0.125", "3.52")
-            gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_gain_flatness)
+            gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_gain_flatness_body)
             gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
             gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
             gui.set_status("Turning on blanking signals", 9); self.en.operate()
@@ -374,7 +422,8 @@ class ate_init:
             s11_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
             s21_raw = self.vna.visa.query("CALC:MEAS2:DATA:FDATa?")  
             gui.set_status("Setting the switches", 2); self.sw.config("vna_head")
-            # gui.set_status("Setting the amplifier in head mode", 11); self.comm.head()
+            gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_gain_flatness_head)
+            gui.set_status("Setting the amplifier in head mode", 11); self.comm.head()
             gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
             gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
             gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
@@ -646,6 +695,7 @@ class ate_init:
                     self.visa.write("ACQuire:POINTs 50000000")
                 if str_config == "harmonic_output_measure":
                     self.visa.write("TIMebase:SCALe 0.0005")
+                    self.visa.write("TIMebase:HORizontal:POSition 0.004")
                     self.visa.write("CHANnel1:SCALe 0.4")
                     self.visa.write("ACQuire:POINTs:MODE MAN")
                     self.visa.write("ACQuire:POINTs 25000000")
@@ -659,11 +709,28 @@ class ate_init:
                 if str_config == "noise_unblanked_measure":
                     self.visa.write("ACQuire:POINTs 100000000")
                     self.visa.write("CHANnel1:SCALe 0.001")
+                    self.visa.write("CHANnel1:BANDwidth 100E6")
                     self.visa.write("TIMebase:SCALe 0.002")
                     self.visa.write("TIMebase:HORizontal:POSition 0.01")
                     self.visa.write("CALCulate:SPECtrum1:STATe ON")
                     self.visa.write("CALCulate:SPECtrum1:SOURce C1")
                     self.visa.write("CALCulate:SPECtrum1:MAGNitude:LEVel -70")
+                    self.visa.write("CALCulate:SPECtrum1:FREQuency:STARt 63.585E6")
+                    self.visa.write("CALCulate:SPECtrum1:FREQuency:STOP 64.135E6")
+                    self.visa.write("CALCulate:SPECtrum1:GATE:POSition 0.01")
+                    self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.02")
+                    self.visa.write("TRIGger:MODE SINGLe")
+                if str_config == "noise_blanked_measure":
+                    self.visa.write("ACQuire:POINTs 100000000")
+                    self.visa.write("CHANnel4:STATe ON")
+                    self.visa.write("CHANnel4:SCALe 0.001")
+                    self.visa.write("CHANnel4:COUPling DC")
+                    self.visa.write("CHANnel4:BANDwidth 100E6")
+                    self.visa.write("TIMebase:SCALe 0.002")
+                    self.visa.write("TIMebase:HORizontal:POSition 0.01")
+                    self.visa.write("CALCulate:SPECtrum1:STATe ON")
+                    self.visa.write("CALCulate:SPECtrum1:SOURce C4")
+                    self.visa.write("CALCulate:SPECtrum1:MAGNitude:LEVel -130")
                     self.visa.write("CALCulate:SPECtrum1:FREQuency:STARt 63.585E6")
                     self.visa.write("CALCulate:SPECtrum1:FREQuency:STOP 64.135E6")
                     self.visa.write("CALCulate:SPECtrum1:GATE:POSition 0.01")
@@ -853,7 +920,10 @@ class ate_init:
     class sw_init:
         def __init__ (self):
             try:
-                self.idn = "unknown switches"
+                rm = pyvisa.ResourceManager()
+                self.visa = rm.open_resource(ate_config.sw_address)
+                self.visa.timeout = 2000
+                self.idn = self.visa.query("*IDN?").replace('\n', '')
                 logging.info("Switches found: %s", self.idn)
             except Exception:
                 logging.warning("Exception occured while initializing the switches")
@@ -864,20 +934,20 @@ class ate_init:
                 match config_name:
                     case "scope_body":
                         logging.info("Switching to SCOPE/BODY measure")
-                        # self.visa.write("SETP=0")
+                        self.visa.write("SETP=0")
                     case "scope_head":
                         logging.info("Switching to SCOPE/HEAD measure")
-                        # self.visa.write("SETP=2")
+                        self.visa.write("SETP=2")
                     case "vna_body":
                         logging.info("Switching to VNA/BODY measure")
-                        # self.visa.write("SETP=5")
+                        self.visa.write("SETP=5")
                     case "vna_head":
                         logging.info("Switching to VNA/HEAD measure")
-                        # self.visa.write("SETP=7")
+                        self.visa.write("SETP=7")
                     case _:
                         logging.warning("Switch configuration", config_name, "unknown")
                         raise RuntimeError("Switch configuration %s unknown", config_name)
-                        # self.visa.write("SETP=0")
+                        self.visa.write("SETP=0")
             except Exception:
                 logging.warning("Exception occured while configuring the switches")
                 raise ATE_Instrument_Error(self.idn) from None
