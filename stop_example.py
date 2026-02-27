@@ -10,8 +10,10 @@ try:
     """ ATE initialization """
     ate = ate_init()
     
+    ate.sw.config("vna_body")
+    
     """ high level stop """
-    ate.poweroff()
+    # ate.poweroff()
     
 #Gestion des erreurs
 except COMM_Error as comm_e:

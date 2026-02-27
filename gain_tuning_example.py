@@ -10,9 +10,11 @@ try:
     ate = ate_init()
     
     """ high level test launch """
-    ate.gain_tuning()
+    master_power, slave_power = ate.gain_tuning()
     
     ate.poweroff()
+    
+    print("Master power:", master_power, "dBm, Slave power:", slave_power,"dBm")
     
     
 #Gestion des erreurs

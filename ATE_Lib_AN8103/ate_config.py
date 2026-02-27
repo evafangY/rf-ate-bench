@@ -3,13 +3,15 @@ scope_address = "TCPIP0::169.254.13.226::hislip0::INSTR"
 vna_address = "TCPIP0::PC_ATE_RF_AMP::hislip_PXI10_CHASSIS1_SLOT1_INDEX0::INSTR"
 en_address = "USB0::0x0957::0x2C07::MY62000370::0::INSTR"
 rf_address = "USB0::0x0957::0x4807::MY59003502::0::INSTR"
+sw_address = "USB0::0xF4EC::0x1900::SSUAAA0CA00003::0::INSTR"
 comm_address = "ASRL5::INSTR"
 master_address = "ASRL4::INSTR"
 slave_address = "ASRL6::INSTR"
 
 """ VNA configurations """
 load_interpulse = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\inter_pulse.csa"'
-load_gain_flatness = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\gain_flatness.csa"'
+load_gain_flatness_body = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\gain_flatness_body.csa"'
+load_gain_flatness_head = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\gain_flatness_head.csa"'
 load_fidelity_forward = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\fidelity_forward.csa"'
 load_fidelity_reverse = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\fidelity_reverse.csa"'
 load_stress_1 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\stress_1.csa"'
@@ -22,6 +24,6 @@ load_stress_7 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ATE_Lib_AN8103\vna_files\stres
 load_stress_8 = r'MMEM:LOAD:FILE "E:\rf-ate-bench\ate_lib_AN8103\vna_files\stress_8.csa"'
 
 """ cables losses """
-rf_loss = 0.0
-scope_head_loss = 0.0
-scope_body_loss = 0.0
+rf_loss = 0.6
+scope_head_loss = 60.97
+scope_body_loss = 61.1
