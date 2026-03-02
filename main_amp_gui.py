@@ -66,23 +66,89 @@ class FakeATE:
         # Simulate master error: decimal 64 (0x40)
         self.master.fault = 0
         self.master.error = 64
-        self.master.biasQ32 = 200
+        self.master.biasQ32 = 0
         
 
+    def input_tuning(self, mode, dbm):
+        target = 0
+        if mode == "body":
+            if dbm == -4: target = -4.5
+            elif dbm == 10: target = -4.5
+            elif dbm == 0: target = -4.5
+        elif mode == "head":
+            if dbm == -4: target = -13.5
+            elif dbm == 10: target = -13.5
+            elif dbm == 0: target = -13.5
+            
+        # Simulate values with some noise to allow "tuning" (randomness)
+        # In a real scenario, the user would adjust something and this would read it.
+        # Here we just return a value that might be in spec or not.
+        # Let's return a value that is mostly in spec to allow passing.
+        val = target + random.uniform(-0.2, 0.2)
+        return val, val
+
     def performance_test(self):
-        self.test_id_13301 = -0.2 + random.uniform(-0.05, 0.05)
-        self.test_id_13201 = 34.0 + random.uniform(-2.0, 2.0)
-        self.test_id_13204 = -150.0 + random.uniform(-5.0, 5.0)
-        self.test_id_13101 = 0.3 + random.uniform(-0.1, 0.1)
-        self.test_id_13102 = 0.3 + random.uniform(-0.1, 0.1)
-        self.test_id_13106 = 60.0 + random.uniform(-1.0, 1.0)
-        self.test_id_13107 = 60.0 + random.uniform(-1.0, 1.0)
-        self.test_id_13108 = 2.0 + random.uniform(-0.5, 0.5)
-        self.test_id_13109 = 2.0 + random.uniform(-0.5, 0.5)
-        self.test_id_13110 = 2.0 + random.uniform(-0.5, 0.5)
-        self.test_id_13111 = 2.0 + random.uniform(-0.5, 0.5)
-        self.test_id_13112 = 2.0 + random.uniform(-0.5, 0.5)
-        self.test_id_13301 = -40.0 + random.uniform(-0.5, 0.5)
+        # Pulse stability
+        self.test_id_13301 = 0.15  # Single pulse drop (dB)
+        self.test_id_13302 = 0.05  # Gain inter pulse stability (dB)
+        self.test_id_13303 = 0.50  # Phase inter pulse stability (deg)
+        
+        # Input/Output
+        self.test_id_12007 = 1.20  # Input VSWR
+        self.test_id_13101 = 0.20  # Body Bandwidth (dB)
+        self.test_id_13102 = 0.20  # Head Bandwidth (dB)
+        self.test_id_13103 = 72.50 # Body output power nominal (dBm)
+        self.test_id_13104 = 63.50 # Head output power nominal (dBm)
+        self.test_id_13105 = 1.00  # Body output margin (dB)
+        self.test_id_13106 = 72.00 # Body gain (dB)
+        self.test_id_13107 = 63.00 # Head delta gain (dB)
+        
+        # Stress sequence variations (%)
+        self.test_id_13108 = 1.0
+        self.test_id_13109 = 1.0
+        self.test_id_13110 = 1.0
+        self.test_id_13111 = 1.0
+        self.test_id_13112 = 1.0
+        self.test_id_13113 = 1.0
+        self.test_id_13114 = 1.0
+        self.test_id_13115 = 1.0
+        
+        # Harmonic & Noise
+        self.test_id_13201 = -35.0  # Harmonic output (dBc)
+        self.test_id_13204 = -75.0  # Unblanked output noise (dBm/Hz)
+        
+        # Fidelity (Gain/Phase Non-linearity & Differential)
+        self.test_id_13205 = 0.40   # Gain NL Body Fwd
+        self.test_id_13206 = 0.05   # Diff Gain Body Fwd
+        self.test_id_13207 = -0.05  # Diff Gain Body Fwd
+        self.test_id_13208 = -0.10  # Diff Gain Body Fwd
+        self.test_id_13209 = 3.00   # Phase NL Body Fwd
+        self.test_id_13210 = 0.20   # Diff Phase Body Fwd
+        self.test_id_13211 = -0.50  # Diff Phase Body Fwd
+        self.test_id_13212 = -1.00  # Diff Phase Body Fwd
+        
+        self.test_id_13213 = 0.40   # Gain NL Body Rev
+        self.test_id_13214 = 0.05   # Diff Gain Body Rev
+        self.test_id_13215 = -0.05  # Diff Gain Body Rev
+        self.test_id_13216 = -0.10  # Diff Gain Body Rev
+        self.test_id_13217 = 3.00   # Phase NL Body Rev
+        self.test_id_13218 = 0.20   # Diff Phase Body Rev
+        self.test_id_13219 = -0.50  # Diff Phase Body Rev
+        self.test_id_13220 = -1.00  # Diff Phase Body Rev 
+
+    def output_tuning(self):
+        body_power = 72.5 + random.uniform(-0.5, 0.5)
+        head_power = 63.5 + random.uniform(-0.5, 0.5)
+        return body_power, head_power
+
+    def gain_tuning(self):
+        master_gain = 69.0 + random.uniform(-0.3, 0.3)
+        slave_gain = 69.0 + random.uniform(-0.3, 0.3)
+        self.master.Gai = master_gain
+        self.slave.Gai = slave_gain
+
+    def poweroff(self):
+        self.comm.state = 0
 
     def noise_unblanked_measure(self):
         self.test_id_13204 = -150.0 + random.uniform(-5.0, 5.0)

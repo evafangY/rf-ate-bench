@@ -7,14 +7,14 @@ PERFORMANCE_SPECS = {
     "13105": ("Body output margin (fault peak - nominal peak)", "dB", None, 1.50),
     "13106": ("Body gain (output-input)", "dB", 71.54, 72.54),
     "13107": ("Head delta gain", "dB", 62.44, 63.64),
-    "13108": ("Seq1 body output power variation", "%", None, 2.00),
-    "13109": ("Seq2 body output power variation", "%", None, 2.00),
-    "13110": ("Seq3 body output power variation", "%", None, 2.00),
-    "13111": ("Seq4 body output power variation", "%", None, 2.00),
-    "13112": ("Seq5 body output power variation", "%", None, 2.00),
-    "13113": ("Seq6 body output power variation", "%", None, 2.00),
-    "13114": ("Seq7 body output power variation", "%", None, 2.00),
-    "13115": ("Seq8 body output power variation", "%", None, 2.00),
+    "13108": ("Seq1 body output power variation", "%", -2.00, 2.00),
+    "13109": ("Seq2 body output power variation", "%", -2.00, 2.00),
+    "13110": ("Seq3 body output power variation", "%", -2.00, 2.00),
+    "13111": ("Seq4 body output power variation", "%", -2.00, 2.00),
+    "13112": ("Seq5 body output power variation", "%", -2.00, 2.00),
+    "13113": ("Seq6 body output power variation", "%", -2.00, 2.00),
+    "13114": ("Seq7 body output power variation", "%", -2.00, 2.00),
+    "13115": ("Seq8 body output power variation", "%", -2.00, 2.00),
     "13201": ("Harmonic output", "dBc", None, -30.00),
     "13204": ("Ublanked output noise power broad spectrum", "dBm/Hz", None, -70.00),
     "13205": ("Gain non-linearity, body forward (-40 to 0 dBm)", "dB", 0.00, 0.80),
@@ -52,12 +52,7 @@ OUTPUT_COND_SPECS = {
 
 
 INPUT_COND_SPECS = {
-    "12001": ("Body RF port -4 dBm, adjust gain to get body PEP", "dBm", 72.04, None),
-    "12002": ("Body RF port -4 dBm, adjust gain to get head PEP", "dBm", 61.04, 65.04),
-    "12003": ("Body RF port 10 dBm, adjust gain to get body PEP", "dBm", 72.04, None),
-    "12004": ("Body RF port 10 dBm, adjust gain to get head PEP", "dBm", 61.04, 65.04),
-    "12005": ("Body RF port 3.5 dBm, adjust gain to get body PEP", "dBm", 72.04, None),
-    "12006": ("Head RF port 3.5 dBm, adjust gain to get head PEP", "dBm", 61.04, 65.04),
+    "12001": ("Gain/attenuation adjustment range of -10 to +4 dB for Body Mode, Head Mode", "Pass/Fail", None, None),
 }
 
 
@@ -70,4 +65,4 @@ DIAGNOSTIC_SPECS = {
     "bias": ("Bias nominal", "", 175, 225),
 }
 
-DIAGNOSTIC_EXCLUDED_BIASES = ["biasQ31", "biasQ33", "biasQ35"]
+DIAGNOSTIC_EXCLUDED_BIASES = ["biasQ31", "biasQ32", "biasQ33"]
