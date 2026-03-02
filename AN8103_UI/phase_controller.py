@@ -1,43 +1,54 @@
 from .phase_services import (
+    # Main phases
     run_diagnostic,
     run_output_conditional_simulation,
     run_power_module_gain_simulation,
-    run_input_conditional_simulation,
+    run_input_conditional_board_tuning,
     run_performance_test,
+    run_configuration_finale,
     run_noise_blanked,
+    # Sub phases registry
+    build_subtest_registry,
+    # Shared
+    TestResult,
 )
 from .specs import PERFORMANCE_SPECS
 
 
-def make_phase_runner(phase_name, ate):
-    def runner():
-        lines = []
-        ok = True
-        values = {}
-        if phase_name == "Diagnostic":
-            lines, ok, values = run_diagnostic(ate)
-        elif phase_name in ("Output conditional tuning", "Tuning de la sortie conditionnelle"):
-            lines, ok, values = run_output_conditional_simulation()
-        elif phase_name in ("Power module gain tuning", "Tuning de la gain du module de puissance"):
-            lines, ok, values = run_power_module_gain_simulation()
-        elif phase_name in ("Input conditional board tuning", "Tuning de l'entrée conditionnelle"):
-            lines, ok, values = run_input_conditional_simulation()
-        elif phase_name in ("Performance test / burn", "Test de performance / burning"):
-            lines, ok, values = run_performance_test(ate)
-        elif phase_name in ("Noise blanked", "Mesure de bruit blanké"):
-            lines, ok, values = run_noise_blanked(ate)
-        else:
-            lines.append(f"{phase_name} is not implemented yet.")
-            ok = False
-        return lines, ok, values
 
+
+
+def make_phase_runner(phase_name, ate, interaction_callback=None):
+    def runner():
+        result_phases = {
+            "Power module gain tuning": lambda: run_power_module_gain_simulation(ate),
+            "Input conditional board tuning": lambda: run_input_conditional_board_tuning(ate, interaction_callback),
+            "Performance test / burn": lambda: run_performance_test(ate),
+        }
+        line_phases = {
+            "Diagnostic": lambda: run_diagnostic(ate),
+            "Output conditional tuning": lambda: run_output_conditional_simulation(ate),
+            "Factory gain reset": lambda: run_configuration_finale(ate, interaction_callback),
+            "Noise blanked": lambda: run_noise_blanked(ate),
+        }
+        if phase_name in result_phases:
+            results, ok = result_phases[phase_name]()
+            return results, ok
+        if phase_name in line_phases:
+            lines, ok, values = line_phases[phase_name]()
+            return lines, ok, values
+        return [f"{phase_name} is not implemented yet."], False, {}
     return runner
 
 
-def make_subtest_runner(method_name, ate):
+def make_subtest_runner(method_name, ate, interaction_callback=None):
     def runner():
-        lines = []
+        results = []
         ok = True
+        registry = build_subtest_registry(ate, interaction_callback)
+        if method_name in registry:
+            return registry[method_name]()
+
         mapping = {
             "single_pulse_measure": ("13301", "test_id_13301"),
             "harmonic_output_measure": ("13201", "test_id_13201"),
@@ -59,28 +70,56 @@ def make_subtest_runner(method_name, ate):
                         unit = spec[1]
                         spec_min = spec[2]
                         spec_max = spec[3]
-                    status = ""
+                    
                     ok_value = True
                     if spec_min is not None and val < spec_min:
                         ok_value = False
                     if spec_max is not None and val > spec_max:
                         ok_value = False
                     status = "OK" if ok_value else "FAIL"
-                    min_str = "" if spec_min is None else str(spec_min)
-                    max_str = "" if spec_max is None else str(spec_max)
-                    lines.append(
-                        f"{test_id} – {label}: {round(val, 2)} {unit} "
-                        f"[{min_str}..{max_str}] {status}"
-                    )
+                    
+                    results.append(TestResult(
+                        test_id=test_id,
+                        label=label,
+                        value=val,
+                        unit=unit,
+                        min_spec=spec_min,
+                        max_spec=spec_max,
+                        status=status
+                    ))
                     ok = ok_value
                 else:
-                    lines.append(f"Sous-test {method_name} terminé.")
+                    results.append(TestResult(
+                        test_id="INFO",
+                        label=f"Sous-test {method_name} terminé.",
+                        value=0.0,
+                        unit="",
+                        min_spec=None,
+                        max_spec=None,
+                        status="INFO"
+                    ))
             except Exception as e:
                 ok = False
-                lines.append(f"Erreur pendant le sous-test {method_name}: {e}")
+                results.append(TestResult(
+                    test_id="ERROR",
+                    label=f"Erreur pendant le sous-test {method_name}: {e}",
+                    value=0.0,
+                    unit="",
+                    min_spec=None,
+                    max_spec=None,
+                    status="FAIL"
+                ))
         else:
             ok = False
-            lines.append(f"Sous-test {method_name} indisponible sur cet ATE.")
-        return lines, ok
+            results.append(TestResult(
+                test_id="ERROR",
+                label=f"Sous-test {method_name} indisponible sur cet ATE.",
+                value=0.0,
+                unit="",
+                min_spec=None,
+                max_spec=None,
+                status="FAIL"
+            ))
+        return results, ok
 
     return runner

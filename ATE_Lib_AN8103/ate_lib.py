@@ -299,7 +299,7 @@ class ate_init:
             harmoniques_array = fft_data_array_harmonic[cut:]
             fondamental = numpy.max(fondamental_array)
             harmonique = numpy.max(harmoniques_array)
-            self.test_id_13201 = abs(fondamental - harmonique)
+            self.test_id_13201 = - abs(fondamental - harmonique)
             logging.info("Harmonic output (13201): %s dB", round(self.test_id_13201, 2))
             gui.set_status("Harmonic output measure completed", 100); time.sleep(0.5)
             gui.close()
@@ -488,10 +488,13 @@ class ate_init:
             self.reverse_s21_mag_diff = numpy.gradient(self.reverse_s21_mag, 0.15)
             self.reverse_s21_phase = numpy.degrees(numpy.angle(self.vna.parse_data(s21_raw)))
             self.reverse_s21_phase_diff = numpy.gradient(self.reverse_s21_phase, 0.15)
+
+
             self.test_id_13213 = numpy.max(self.reverse_s21_mag[:267]) - numpy.min(self.reverse_s21_mag[:267])
             self.test_id_13214 = numpy.max(self.reverse_s21_mag_diff[20:267]) - numpy.min(self.reverse_s21_mag_diff[20:267])
             self.test_id_13215 = numpy.max(self.reverse_s21_mag_diff[7:20]) - numpy.min(self.reverse_s21_mag_diff[7:20])
             self.test_id_13216 = numpy.max(self.reverse_s21_mag_diff[:7]) - numpy.min(self.reverse_s21_mag_diff[:7])
+            
             self.test_id_13217 = numpy.max(self.reverse_s21_phase[:267]) - numpy.min(self.reverse_s21_phase[:267])
             self.test_id_13218 = numpy.max(self.reverse_s21_phase_diff[20:267]) - numpy.min(self.reverse_s21_phase_diff[20:267])
             self.test_id_13219 = numpy.max(self.reverse_s21_phase_diff[7:20]) - numpy.min(self.reverse_s21_phase_diff[7:20])
