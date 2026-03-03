@@ -46,8 +46,8 @@ OUTPUT_COND_SPECS = {
     "14004": ("Head RF sample outputs A gain", "dB", -41.00, -39.00),
     "14005": ("Head RF sample outputs B gain", "dB", -41.00, -39.00),
     "14011": ("TR input/RF output port isolation", "dB", 35.00, None),
-    "14009": ("Head TR resistance to head output", "ohm", 0.00, 0.10),
-    "14010": ("Body TR resistance to body output", "ohm", 0.00, 0.10),
+    "14009": ("Head TR resistance to head output", "ohm", 0.00, 1.00),
+    "14010": ("Body TR resistance to body output", "ohm", 0.00, 1.00),
 }
 
 

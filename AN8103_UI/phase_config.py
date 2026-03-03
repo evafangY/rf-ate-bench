@@ -79,11 +79,18 @@ PHASE_CONFIG = {
         "image": "Models/Pics/Output_Conditional_Tuning_Connection.png",
         "instruction": (
             "Préparer le réglage de la sortie conditionnelle (Output Conditional Tuning).\n"
-            "Assurez-vous que la configuration est correcte."
+            "Assurez-vous que la configuration est correcte.\n"
+            "Connecter les 8 sondes de l'oscilloscope."
         ),
         "require_check": True,
         "check_text": "Vérifier que vous travaillez sur ATE 02. Vérifier que les câbles de sont connectés correctement.",
         "caption": "",
+        "enable_subtests_on_run": True,
+        "subtests": [
+            {"method": "run_step2_oscilloscope_tests", "label": "Mesures Oscilloscope (8 ch)"},
+            {"method": "run_step2_resistance_head", "label": "Résistance Head"},
+            {"method": "run_step2_resistance_body", "label": "Résistance Body"},
+        ],
     },
     "Input conditional board tuning": {
         "display_name": "Réglage du module d'entrée",

@@ -1,599 +1,21 @@
+import datetime
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
     QStackedWidget,
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QTextEdit,
     QMessageBox,
     QInputDialog,
-    QComboBox,
 )
-from PyQt5.QtGui import QFont, QPixmap
-from PyQt5.QtCore import Qt
 from ATE_Lib_AN8103.ate_lib import COMM_Error, ATE_Instrument_Error
-import datetime
 from .data_store import SessionData, PhaseResult
 from .phase_config import PHASES, PHASE_CONFIG, ATE_CONFIGURATIONS
 from .phase_controller import make_phase_runner, make_subtest_runner
 from .phase_services import TestResult
-from .phase_views import render_diagnostic_report, render_performance_report, render_results_table
-
-class LoginPage(QWidget):
-    def __init__(self, start_callback):
-        super().__init__()
-        self.start_callback = start_callback
-
-        layout = QVBoxLayout()
-        layout.setSpacing(16)
-
-        title = QLabel("SRFD II RF Amplifier 1.5T ATE")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("Arial", 24, QFont.Bold))
-        layout.addWidget(title)
-
-        self.operator_edit = QLineEdit()
-        self.station_edit = QLineEdit()
-        self.ate_combo = QComboBox()
-        self.ate_combo.addItems(["ATE01", "ATE02"])
-        self.dut_serial_edit = QLineEdit()
-        self.part_number_edit = QLineEdit()
-        self.date_edit = QLineEdit()
-
-        self.station_edit.setText("01")
-        self.part_number_edit.setText("2351573-02")
-        self.date_edit.setText(datetime.datetime.now().strftime("%Y-%m-%d"))
-
-        def add_row(label_text, widget):
-            row = QHBoxLayout()
-            label = QLabel(label_text)
-            label.setFixedWidth(150)
-            row.addWidget(label)
-            row.addWidget(widget)
-            layout.addLayout(row)
-
-        add_row("SSO de l'opérateur:", self.operator_edit)
-        add_row("ID de la station:", self.station_edit)
-        add_row("Sélection ATE:", self.ate_combo)
-        add_row("Numéro de série du DUT:", self.dut_serial_edit)
-        add_row("Numéro de pièce:", self.part_number_edit)
-        add_row("Date:", self.date_edit)
-
-        self.status_label = QLabel("")
-        layout.addWidget(self.status_label)
-
-        start_button = QPushButton("Démarrer la séquence de tests")
-        start_button.setFont(QFont("Arial", 14, QFont.Bold))
-        start_button.clicked.connect(self.on_start)
-        layout.addWidget(start_button)
-
-        self.setLayout(layout)
-
-    def on_start(self):
-        tech = {
-            "SSO": self.operator_edit.text().strip(),
-            "Station_ID": self.station_edit.text().strip(),
-            "ATE_ID": self.ate_combo.currentText(),
-        }
-        dut = {
-            "DUT_Serial": self.dut_serial_edit.text().strip(),
-            "Part_Number": self.part_number_edit.text().strip(),
-            "Test_Date": self.date_edit.text().strip(),
-        }
-        if not tech["SSO"]:
-            self.status_label.setText("Veuillez entrer le SSO de l'opérateur.")
-            return
-        self.start_callback(tech, dut)
-
-
-class SetupPage(QWidget):
-    def __init__(self, proceed_callback):
-        super().__init__()
-        self.proceed_callback = proceed_callback
-        self.target_index = -1
-        
-        layout = QVBoxLayout()
-        layout.setSpacing(16)
-        
-        self.title_label = QLabel("Configuration Setup")
-        self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setFont(QFont("Arial", 22, QFont.Bold))
-        layout.addWidget(self.title_label)
-        
-        self.instruction_label = QLabel("")
-        self.instruction_label.setWordWrap(True)
-        self.instruction_label.setAlignment(Qt.AlignCenter)
-        self.instruction_label.setFont(QFont("Arial", 14))
-        layout.addWidget(self.instruction_label)
-        
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.image_label)
-        
-        confirm_btn = QPushButton("Configuration Prête / Continue")
-        confirm_btn.setFont(QFont("Arial", 16, QFont.Bold))
-        confirm_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px;")
-        confirm_btn.clicked.connect(self.on_proceed)
-        layout.addWidget(confirm_btn)
-        
-        self.setLayout(layout)
-
-    def set_config(self, config_data, target_index):
-        self.target_index = target_index
-        title = config_data.get("title", "Setup Configuration")
-        instruction = config_data.get("instruction", "")
-        image_path = config_data.get("image", "")
-        
-        self.title_label.setText(title)
-        self.instruction_label.setText(instruction)
-        
-        if image_path:
-            pix = QPixmap(image_path)
-            if not pix.isNull():
-                self.image_label.setPixmap(pix.scaledToHeight(400, Qt.SmoothTransformation))
-            else:
-                self.image_label.clear()
-        else:
-            self.image_label.clear()
-
-    def on_proceed(self):
-        if self.target_index != -1:
-            self.proceed_callback(self.target_index)
-
-
-class PhaseMenuPage(QWidget):
-    def __init__(self, phases, start_callback, eng_mode_callback, select_phase_callback):
-        super().__init__()
-        self.select_phase_callback = select_phase_callback
-        self.phase_buttons = []
-        self.status_labels = []
-
-        layout = QVBoxLayout()
-        layout.setSpacing(16)
-
-        title = QLabel("Sélectionner le test")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("Arial", 22, QFont.Bold))
-        layout.addWidget(title)
-
-        subtitle = QLabel("Mode opérateur: les tests sont exécutés dans l'ordre.\nMode ingénieur: sélectionnez n'importe quel test.")
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setFont(QFont("Arial", 11))
-        layout.addWidget(subtitle)
-
-        for index, phase in enumerate(phases):
-            row = QHBoxLayout()
-            status = QLabel("Non testé")
-            status.setFixedWidth(90)
-            status.setAlignment(Qt.AlignCenter)
-            status.setFont(QFont("Arial", 11))
-            row.addWidget(status)
-
-            cfg = PHASE_CONFIG.get(phase, {})
-            display_name = cfg.get("display_name", phase)
-
-            btn = QPushButton(f"{index + 1}. {display_name}")
-            btn.setFont(QFont("Arial", 13))
-            btn.setEnabled(False)
-
-            def make_handler(i):
-                def handler():
-                    self.select_phase_callback(i)
-
-                return handler
-
-            btn.clicked.connect(make_handler(index))
-            self.phase_buttons.append(btn)
-            self.status_labels.append(status)
-            row.addWidget(btn)
-            layout.addLayout(row)
-
-        button_row = QHBoxLayout()
-
-        start_button = QPushButton("Démarrer la séquence (mode opérateur)")
-        start_button.setFont(QFont("Arial", 14, QFont.Bold))
-        start_button.clicked.connect(start_callback)
-        button_row.addWidget(start_button)
-
-        eng_button = QPushButton("Mode ingénieur")
-        eng_button.setFont(QFont("Arial", 14, QFont.Bold))
-        eng_button.clicked.connect(eng_mode_callback)
-        button_row.addWidget(eng_button)
-
-        layout.addLayout(button_row)
-        self.setLayout(layout)
-
-    def enable_engineering(self, enabled: bool):
-        for btn in self.phase_buttons:
-            btn.setEnabled(enabled)
-
-    def set_phase_enabled(self, index: int, enabled: bool):
-        if 0 <= index < len(self.phase_buttons):
-            self.phase_buttons[index].setEnabled(enabled)
-
-    def set_phase_status(self, index: int, ok: bool):
-        if 0 <= index < len(self.status_labels):
-            label = self.status_labels[index]
-            if ok is None:
-                label.setText("Non testé")
-                label.setStyleSheet("color: black;")
-                label.setFont(QFont("Arial", 11))
-            elif ok:
-                label.setText("Réussi")
-                label.setStyleSheet("color: green;")
-            else:
-                label.setText("Échec")
-                label.setStyleSheet("color: red;")
-
-
-class PhasePage(QWidget):
-    def __init__(
-        self,
-        phase_name,
-        run_callback,
-        back_callback,
-        instruction_text="",
-        image_path=None,
-        require_check=False,
-        check_text=None,
-        caption_text=None,
-        subtests=None,
-        enable_subtests_on_run=False,
-        locked_subtests=None,
-        unlock_when_subtests_done=None,
-        status_callback=None,
-    ):
-        super().__init__()
-        self.phase_name = phase_name
-        self.run_callback = run_callback
-        self.back_callback = back_callback
-        self.status_callback = status_callback
-        self.require_check = require_check
-        self.checked = not require_check
-        self.subtests = subtests or []
-        self.enable_subtests_on_run = enable_subtests_on_run
-        self.locked_subtests = set(locked_subtests or [])
-        self.unlock_when_subtests_done = set(unlock_when_subtests_done or [])
-        self.subtest_buttons = []
-        self.subtest_buttons_by_label = {}
-        self.subtest_results = {}
-        self.subtests_unlocked = not enable_subtests_on_run
-        self.eng_mode = False
-
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
-
-        title = QLabel(phase_name)
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("Arial", 22, QFont.Bold))
-        layout.addWidget(title)
-
-        self.status_label = QLabel("Statut du test : Non testé")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setFont(QFont("Arial", 11))
-        layout.addWidget(self.status_label)
-
-        if instruction_text:
-            instruction_label = QLabel(instruction_text)
-            instruction_label.setWordWrap(True)
-            instruction_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            instruction_label.setFont(QFont("Arial", 12))
-            layout.addWidget(instruction_label)
-
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        if image_path:
-            pix = QPixmap(image_path)
-            if not pix.isNull():
-                self.image_label.setPixmap(pix.scaledToHeight(250, Qt.SmoothTransformation))
-        layout.addWidget(self.image_label)
-        if caption_text:
-            caption = QLabel(caption_text)
-            caption.setAlignment(Qt.AlignCenter)
-            caption.setFont(QFont("Arial", 11))
-            layout.addWidget(caption)
-
-        if self.require_check:
-            check_row = QHBoxLayout()
-            text = check_text if check_text is not None else ""
-            check_label = QLabel(text)
-            check_label.setWordWrap(True)
-            check_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            check_label.setFont(QFont("Arial", 12))
-            check_row.addWidget(check_label)
-            self.check_button = QPushButton("Vérifié")
-            self.check_button.setFont(QFont("Arial", 12, QFont.Bold))
-            self.check_button.clicked.connect(self.on_checked)
-            check_row.addWidget(self.check_button)
-            layout.addLayout(check_row)
-
-        if self.subtests:
-            sub_row = QHBoxLayout()
-            for label, cb in self.subtests:
-                btn = QPushButton(label)
-                btn.setFont(QFont("Arial", 12))
-                btn.clicked.connect(self.make_subtest_handler(cb, label))
-                btn.setEnabled(False)
-                self.subtest_buttons.append(btn)
-                self.subtest_buttons_by_label[label] = btn
-                sub_row.addWidget(btn)
-            layout.addLayout(sub_row)
-
-        self.result_display = QTextEdit()
-        self.result_display.setFont(QFont("Arial", 12))
-        self.result_display.setReadOnly(True)
-        layout.addWidget(self.result_display)
-
-        button_row = QHBoxLayout()
-        self.run_button = QPushButton("Exécuter le test")
-        self.run_button.setFont(QFont("Arial", 14, QFont.Bold))
-        self.run_button.setEnabled(self.checked)
-        self.run_button.clicked.connect(self.on_run)
-        button_row.addWidget(self.run_button)
-
-        self.back_button = QPushButton("Retour au menu")
-        self.back_button.setFont(QFont("Arial", 12))
-        self.back_button.clicked.connect(self.back_callback)
-        button_row.addWidget(self.back_button)
-
-        self.next_button = QPushButton("Étape suivante")
-        self.next_button.setFont(QFont("Arial", 14, QFont.Bold))
-        self.next_button.setEnabled(False)
-        button_row.addWidget(self.next_button)
-
-        layout.addLayout(button_row)
-        self.setLayout(layout)
-
-    def set_eng_mode(self, enabled: bool):
-        self.eng_mode = enabled
-        if enabled:
-            self.run_button.setEnabled(True)
-            self.enable_subtests(True)
-        else:
-            self.run_button.setEnabled(self.checked)
-            self.enable_subtests(False)
-
-    def enable_subtests(self, enabled: bool):
-        if self.eng_mode:
-            for btn in self.subtest_buttons:
-                btn.setEnabled(True)
-            return
-
-        if not enabled:
-            for btn in self.subtest_buttons:
-                btn.setEnabled(False)
-            return
-
-        if self.enable_subtests_on_run and not self.subtests_unlocked:
-            for btn in self.subtest_buttons:
-                btn.setEnabled(False)
-            return
-
-        for label, btn in self.subtest_buttons_by_label.items():
-            if label in self.locked_subtests:
-                btn.setEnabled(False)
-            else:
-                btn.setEnabled(True)
-        self.update_locked_subtests()
-
-    def update_locked_subtests(self):
-        if self.eng_mode:
-            return
-
-        if not self.locked_subtests:
-            return
-
-        # Check dependencies: must be present AND passed
-        deps_met = True
-        if self.unlock_when_subtests_done:
-            for dep in self.unlock_when_subtests_done:
-                if dep not in self.subtest_results:
-                    deps_met = False
-                    break
-                
-                # Check result status
-                res_list = self.subtest_results[dep]
-                if not isinstance(res_list, list):
-                    res_list = [res_list]
-                
-                step_passed = True
-                for r in res_list:
-                    if isinstance(r, TestResult):
-                        if r.status not in ("PASS", "OK"):
-                            step_passed = False
-                            break
-                if not step_passed:
-                    deps_met = False
-                    break
-        
-        for label in self.locked_subtests:
-            btn = self.subtest_buttons_by_label.get(label)
-            if btn:
-                btn.setEnabled(deps_met)
-
-    def set_status(self, ok: bool, enable_next: bool = True):
-        if self.status_callback:
-            self.status_callback(ok)
-        if ok:
-            if enable_next:
-                self.next_button.setEnabled(True)
-            self.status_label.setText("Statut du test : Réussi")
-            self.status_label.setStyleSheet("color: green;")
-        else:
-            self.status_label.setText("Statut du test : Échec")
-            self.status_label.setStyleSheet("color: red;")
-
-    def collect_subtest_results(self):
-        combined = []
-        for lbl, _ in self.subtests:
-            if lbl in self.subtest_results:
-                res = self.subtest_results[lbl]
-                if isinstance(res, list):
-                    combined.extend(res)
-                else:
-                    combined.append(res)
-        return combined
-
-    def all_subtests_ran(self):
-        for lbl, _ in self.subtests:
-            if lbl not in self.subtest_results:
-                return False
-        return True
-
-    def all_subtests_passed(self):
-        for lbl, _ in self.subtests:
-            res_list = self.subtest_results[lbl]
-            if isinstance(res_list, list) and len(res_list) > 0 and isinstance(res_list[0], TestResult):
-                for r in res_list:
-                    if r.status not in ("PASS", "OK"):
-                        return False
-        return True
-
-    def on_checked(self):
-        self.checked = True
-        self.run_button.setEnabled(True)
-        if self.enable_subtests_on_run:
-            self.subtests_unlocked = False
-        self.enable_subtests(False)
-        self.check_button.setStyleSheet("background-color: green; color: white;")
-
-    def on_run(self):
-        if self.enable_subtests_on_run and self.subtests:
-            self.result_display.clear()
-            self.subtest_results = {}
-            self.subtests_unlocked = True
-            self.status_label.setText("Statut du test : Non testé")
-            self.status_label.setStyleSheet("")
-            self.enable_subtests(True)
-            if "Non testé" in self.status_label.text():
-                self.status_label.setText("Veuillez exécuter les sous-tests")
-        else:
-            self.handle_run(self.run_callback, True)
-
-    def make_subtest_handler(self, cb, label):
-        def handler():
-            self.handle_run(cb, False, subtest_label=label)
-
-        return handler
-
-    def handle_run(self, callback, update_status, subtest_label=None):
-        if subtest_label and self.enable_subtests_on_run and not self.subtests_unlocked and not self.eng_mode:
-            return
-
-        if not subtest_label:
-            self.result_display.clear()
-            self.subtest_results = {}
-
-        try:
-            results, ok = callback()
-
-            if subtest_label:
-                self.subtest_results[subtest_label] = results
-                self.update_locked_subtests()
-                combined = self.collect_subtest_results()
-                if self.all_subtests_ran():
-                    if self.all_subtests_passed():
-                        self.set_status(True)
-                        combined.append(
-                            TestResult(
-                                test_id="FINAL",
-                                label="Résultat final",
-                                value="PASS",
-                                unit="",
-                                min_spec=None,
-                                max_spec=None,
-                                status="PASS",
-                            )
-                        )
-                    else:
-                        self.set_status(False)
-                        combined.append(
-                            TestResult(
-                                test_id="FINAL",
-                                label="Résultat final",
-                                value="FAIL",
-                                unit="",
-                                min_spec=None,
-                                max_spec=None,
-                                status="FAIL",
-                            )
-                        )
-                results = combined
-            if results:
-                if isinstance(results[0], TestResult):
-                    self.result_display.setHtml(render_results_table(results))
-                else:
-                    text_lines = results
-                    joined = "\n".join(text_lines)
-                    if "<" in joined and ">" in joined:
-                        self.result_display.setHtml(joined)
-                    else:
-                        rows = []
-                        for line in text_lines:
-                            if " – " in line and "[" in line and "]" in line and ": " in line:
-                                try:
-                                    id_part, rest = line.split(" – ", 1)
-                                    label_part, tail = rest.split(": ", 1)
-                                    before_bracket, after_bracket = tail.split("[", 1)
-                                    bracket_content, status_part = after_bracket.split("]", 1)
-                                    status = status_part.strip()
-                                    tokens = before_bracket.strip().split()
-                                    value = tokens[0]
-                                    unit = " ".join(tokens[1:]) if len(tokens) > 1 else ""
-                                    spec_min, spec_max = "", ""
-                                    if ".." in bracket_content:
-                                        spec_min, spec_max = [t.strip() for t in bracket_content.split("..", 1)]
-                                    rows.append((id_part.strip(), label_part.strip(), value, unit, spec_min, spec_max, status))
-                                except Exception:
-                                    pass
-                        if rows:
-                            html = []
-                            html.append("<table border='1' cellspacing='0' cellpadding='3'>")
-                            html.append("<tr><th>ID</th><th>Mesure</th><th>Valeur</th><th>Unité</th><th>Spec min</th><th>Spec max</th><th>Statut</th></tr>")
-                            for r in rows:
-                                idp, labelp, valp, unitp, smin, smax, stat = r
-                                row_style = ""
-                                if stat.upper() == "FAIL":
-                                    row_style = " style='color:red;font-weight:bold'"
-                                elif stat.upper() == "OK":
-                                    row_style = " style='color:green'"
-                                html.append(
-                                    f"<tr{row_style}><td>{idp}</td><td>{labelp}</td><td>{valp}</td>"
-                                    f"<td>{unitp}</td><td>{smin}</td><td>{smax}</td><td>{stat}</td></tr>"
-                                )
-                            html.append("</table>")
-                            self.result_display.setHtml("".join(html))
-                        else:
-                            self.result_display.setText(joined)
-            if update_status:
-                self.set_status(ok)
-                self.enable_subtests(True)
-        except COMM_Error as e:
-            QMessageBox.warning(self, "Amplificateur error", f"Error {hex(e.code)}")
-            if update_status:
-                self.set_status(False, enable_next=False)
-        except ATE_Instrument_Error as e:
-            QMessageBox.warning(self, "Instrument error", str(e.instrument))
-            if update_status:
-                self.set_status(False, enable_next=False)
-        except Exception as e:
-            QMessageBox.warning(self, "Unexpected error", str(e))
-            if update_status:
-                self.set_status(False, enable_next=False)
-
-    def reset_operator_flow(self):
-        if self.eng_mode:
-            return
-        if self.require_check:
-            self.checked = False
-            self.run_button.setEnabled(False)
-            self.check_button.setStyleSheet("")
-        if self.enable_subtests_on_run and self.subtests:
-            self.subtests_unlocked = False
-            self.subtest_results = {}
-            self.enable_subtests(False)
+from .phase_views import render_diagnostic_report, render_performance_report
+from .login_page import LoginPage
+from .setup_page import SetupPage
+from .phase_menu_page import PhaseMenuPage
+from .phase_page import PhasePage
 
 
 class MainWindow(QWidget):
@@ -804,8 +226,30 @@ class MainWindow(QWidget):
         self.stack.setCurrentIndex(2 + index)
 
     def interaction_callback(self, msg):
+        if isinstance(msg, dict) and msg.get("type") == "manual_input":
+            title = msg.get("title", "Saisie Manuelle")
+            instruction = msg.get("instruction", "Veuillez saisir une valeur:")
+            default_value = msg.get("default_value", 0.0)
+            min_val = msg.get("min_value", -1000.0)
+            max_val = msg.get("max_value", 1000.0)
+            decimals = msg.get("decimals", 2)
+            
+            val, ok = QInputDialog.getDouble(
+                self,
+                title,
+                instruction,
+                default_value,
+                min_val,
+                max_val,
+                decimals,
+            )
+            return {
+                "ok": ok,
+                "value": val
+            }
+
         if isinstance(msg, dict) and msg.get("type") == "step6_gain_adjust":
-            title = msg.get("title", "Step 6 - Réglage Manuel")
+            title = msg.get("title", "Réglage Manuel")
             instruction = msg.get("instruction", "")
             target = msg.get("target_dbm")
             tol = msg.get("tolerance_db")
@@ -814,6 +258,7 @@ class MainWindow(QWidget):
             stable_count = int(msg.get("stable_count", 0) or 0)
             required_count = int(msg.get("required_count", 3) or 3)
             allow_auto_measure = bool(msg.get("allow_auto_measure", False))
+            allow_manual_measure = bool(msg.get("allow_manual_measure", True))
 
             measured_text = "N/A" if measured is None else f"{float(measured):.2f} dBm"
             target_text = "N/A" if target is None else f"{float(target):.2f} dBm"
@@ -833,7 +278,7 @@ class MainWindow(QWidget):
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle(title)
             msg_box.setText(text)
-            measure_btn = msg_box.addButton("Mesurer", QMessageBox.YesRole)
+            measure_btn = msg_box.addButton("Mesurer", QMessageBox.YesRole) if allow_manual_measure else None
             continue_btn = msg_box.addButton("Continuer", QMessageBox.NoRole)
             auto_btn = msg_box.addButton("Mesure ATE", QMessageBox.ActionRole) if allow_auto_measure else None
             abort_btn = msg_box.addButton("Annuler", QMessageBox.RejectRole)
@@ -845,7 +290,7 @@ class MainWindow(QWidget):
                     "action": "auto_measure",
                     "measured_dbm": measured,
                 }
-            if clicked == measure_btn:
+            if measure_btn is not None and clicked == measure_btn:
                 default_value = float(measured) if measured is not None else (float(target) if target is not None else 72.0)
                 val, ok = QInputDialog.getDouble(
                     self,
