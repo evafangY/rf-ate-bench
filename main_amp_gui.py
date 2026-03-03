@@ -16,7 +16,32 @@ class FakeATE:
         self.test_id_13201 = 35.0
         self.test_id_13204 = -152.0
         self.is_simulation = True
-        self.comm = type("Comm", (), {"state": 1})()
+        self.current_rf_input_dbm = 0.0
+        self.current_mode = "body"
+
+        class _SimComm:
+            def __init__(self, parent):
+                self.parent = parent
+                self.state = 1
+            def standby(self):
+                self.state = 1
+            def body(self):
+                self.parent.current_mode = "body"
+                self.state = 3
+            def head(self):
+                self.parent.current_mode = "head"
+                self.state = 2
+
+        class _SimRF:
+            def __init__(self, parent):
+                self.parent = parent
+            def config(self, dbm, _mode):
+                self.parent.current_rf_input_dbm = float(dbm)
+            def operate(self):
+                return None
+
+        self.comm = _SimComm(self)
+        self.rf = _SimRF(self)
         self.master = type(
             "Side",
             (),
@@ -146,6 +171,14 @@ class FakeATE:
         slave_gain = 69.0 + random.uniform(-0.3, 0.3)
         self.master.Gai = master_gain
         self.slave.Gai = slave_gain
+
+    def gain_tuning_power_measure(self, body_head):
+        mode = body_head or self.current_mode
+        if mode == "head":
+            target = 60.0 if self.current_rf_input_dbm <= 0.1 else 63.5
+        else:
+            target = 68.5 if self.current_rf_input_dbm <= 0.1 else 72.0
+        return target + random.uniform(-0.12, 0.12)
 
     def poweroff(self):
         self.comm.state = 0

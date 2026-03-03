@@ -1,0 +1,15 @@
+[MASTER]
+ignore=ATE_Lib_AN8103,venv,.git,__pycache__
+
+[MESSAGES CONTROL]
+disable=C0114,C0115,C0116,R0903,R0902,R0913,R0914
+
+[FORMAT]
+max-line-length=120
+max-module-lines=500
+
+[DESIGN]
+max-branches=15
+max-statements=100
+max-locals=25
+max-args=10

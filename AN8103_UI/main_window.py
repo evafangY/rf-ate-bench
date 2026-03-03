@@ -15,7 +15,6 @@ from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
 from ATE_Lib_AN8103.ate_lib import COMM_Error, ATE_Instrument_Error
 import datetime
-import re
 from .data_store import SessionData, PhaseResult
 from .phase_config import PHASES, PHASE_CONFIG, ATE_CONFIGURATIONS
 from .phase_controller import make_phase_runner, make_subtest_runner
@@ -260,6 +259,7 @@ class PhasePage(QWidget):
         self.subtest_buttons = []
         self.subtest_buttons_by_label = {}
         self.subtest_results = {}
+        self.subtests_unlocked = not enable_subtests_on_run
         self.eng_mode = False
 
         layout = QVBoxLayout()
@@ -361,16 +361,22 @@ class PhasePage(QWidget):
                 btn.setEnabled(True)
             return
 
-        for label, btn in self.subtest_buttons_by_label.items():
-            if not enabled:
+        if not enabled:
+            for btn in self.subtest_buttons:
                 btn.setEnabled(False)
-                continue
+            return
+
+        if self.enable_subtests_on_run and not self.subtests_unlocked:
+            for btn in self.subtest_buttons:
+                btn.setEnabled(False)
+            return
+
+        for label, btn in self.subtest_buttons_by_label.items():
             if label in self.locked_subtests:
                 btn.setEnabled(False)
             else:
                 btn.setEnabled(True)
-        if enabled:
-            self.update_locked_subtests()
+        self.update_locked_subtests()
 
     def update_locked_subtests(self):
         if self.eng_mode:
@@ -402,11 +408,10 @@ class PhasePage(QWidget):
                     deps_met = False
                     break
         
-        if deps_met:
-            for label in self.locked_subtests:
-                btn = self.subtest_buttons_by_label.get(label)
-                if btn:
-                    btn.setEnabled(True)
+        for label in self.locked_subtests:
+            btn = self.subtest_buttons_by_label.get(label)
+            if btn:
+                btn.setEnabled(deps_met)
 
     def set_status(self, ok: bool, enable_next: bool = True):
         if self.status_callback:
@@ -449,6 +454,8 @@ class PhasePage(QWidget):
     def on_checked(self):
         self.checked = True
         self.run_button.setEnabled(True)
+        if self.enable_subtests_on_run:
+            self.subtests_unlocked = False
         self.enable_subtests(False)
         self.check_button.setStyleSheet("background-color: green; color: white;")
 
@@ -456,6 +463,7 @@ class PhasePage(QWidget):
         if self.enable_subtests_on_run and self.subtests:
             self.result_display.clear()
             self.subtest_results = {}
+            self.subtests_unlocked = True
             self.status_label.setText("Statut du test : Non testé")
             self.status_label.setStyleSheet("")
             self.enable_subtests(True)
@@ -471,6 +479,9 @@ class PhasePage(QWidget):
         return handler
 
     def handle_run(self, callback, update_status, subtest_label=None):
+        if subtest_label and self.enable_subtests_on_run and not self.subtests_unlocked and not self.eng_mode:
+            return
+
         if not subtest_label:
             self.result_display.clear()
             self.subtest_results = {}
@@ -571,6 +582,18 @@ class PhasePage(QWidget):
             QMessageBox.warning(self, "Unexpected error", str(e))
             if update_status:
                 self.set_status(False, enable_next=False)
+
+    def reset_operator_flow(self):
+        if self.eng_mode:
+            return
+        if self.require_check:
+            self.checked = False
+            self.run_button.setEnabled(False)
+            self.check_button.setStyleSheet("")
+        if self.enable_subtests_on_run and self.subtests:
+            self.subtests_unlocked = False
+            self.subtest_results = {}
+            self.enable_subtests(False)
 
 
 class MainWindow(QWidget):
@@ -775,20 +798,84 @@ class MainWindow(QWidget):
 
     def resume_phase_after_setup(self, index):
         self.current_phase_index = index
+        page = self.phase_pages[index]
+        page.reset_operator_flow()
         # Index 0 is Login, 1 is Menu, 2 is Phase 1...
         self.stack.setCurrentIndex(2 + index)
 
     def interaction_callback(self, msg):
+        if isinstance(msg, dict) and msg.get("type") == "step6_gain_adjust":
+            title = msg.get("title", "Step 6 - Réglage Manuel")
+            instruction = msg.get("instruction", "")
+            target = msg.get("target_dbm")
+            tol = msg.get("tolerance_db")
+            measured = msg.get("measured_dbm")
+            status = msg.get("status", "")
+            stable_count = int(msg.get("stable_count", 0) or 0)
+            required_count = int(msg.get("required_count", 3) or 3)
+            allow_auto_measure = bool(msg.get("allow_auto_measure", False))
+
+            measured_text = "N/A" if measured is None else f"{float(measured):.2f} dBm"
+            target_text = "N/A" if target is None else f"{float(target):.2f} dBm"
+            tol_text = "N/A" if tol is None else f"±{float(tol):.2f} dB"
+
+            text = (
+                f"{instruction}\n\n"
+                f"Cible: {target_text} ({tol_text})\n"
+                f"Mesure actuelle: {measured_text}\n"
+                f"Statut: {status}\n"
+                f"Mesures consécutives valides: {stable_count}/{required_count}\n\n"
+                "Mesurer: saisir une nouvelle lecture du wattmètre.\n"
+                "Continuer: valider cette étape.\n"
+                "Annuler: arrêter l'étape."
+            )
+
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle(title)
+            msg_box.setText(text)
+            measure_btn = msg_box.addButton("Mesurer", QMessageBox.YesRole)
+            continue_btn = msg_box.addButton("Continuer", QMessageBox.NoRole)
+            auto_btn = msg_box.addButton("Mesure ATE", QMessageBox.ActionRole) if allow_auto_measure else None
+            abort_btn = msg_box.addButton("Annuler", QMessageBox.RejectRole)
+            msg_box.exec_()
+
+            clicked = msg_box.clickedButton()
+            if auto_btn is not None and clicked == auto_btn:
+                return {
+                    "action": "auto_measure",
+                    "measured_dbm": measured,
+                }
+            if clicked == measure_btn:
+                default_value = float(measured) if measured is not None else (float(target) if target is not None else 72.0)
+                val, ok = QInputDialog.getDouble(
+                    self,
+                    "Mesure wattmètre",
+                    "Puissance mesurée (dBm):",
+                    default_value,
+                    -100.0,
+                    100.0,
+                    2,
+                )
+                return {
+                    "action": "measure",
+                    "measured_dbm": float(val) if ok else measured,
+                }
+            if clicked == abort_btn:
+                return {
+                    "action": "abort",
+                    "measured_dbm": measured,
+                }
+            return {
+                "action": "continue",
+                "measured_dbm": measured,
+            }
+
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Réglage Manuel")
         msg_box.setText(msg)
-        
-        # Custom buttons
         retry_btn = msg_box.addButton("Mesurer", QMessageBox.YesRole)
         continue_btn = msg_box.addButton("Continuer", QMessageBox.NoRole)
-        
         msg_box.exec_()
-        
         return msg_box.clickedButton() == retry_btn
 
     def make_phase_runner(self, phase_name):
@@ -936,5 +1023,11 @@ class MainWindow(QWidget):
             else:
                 self.phase_ok[PHASES[self.current_phase_index]] = False
                 self.menu_page.set_phase_status(self.current_phase_index, None)
+        
+        # Robustness: Ensure all completed phases have their menu buttons enabled
+        for i, page in enumerate(self.phase_pages):
+            status_text = page.status_label.text()
+            if "Réussi" in status_text or "Échec" in status_text:
+                self.menu_page.set_phase_enabled(i, True)
                 
         self.stack.setCurrentIndex(1)

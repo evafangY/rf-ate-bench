@@ -144,12 +144,20 @@ PHASE_CONFIG = {
         "ate_config": "CONF_PERF",
         "image": "Models/Pics/ATE_configuration3.png",
         "instruction": (
-            "Appliquer le réglage d'usine de l'amplificateur.\n"
-            "Cette étape prépare l'unité pour la mesure de bruit."
+            "Réaliser le réglage Step 6 en trois sous-étapes.\n"
+            "Étape 1: pré-réglage BODY, puis réglages finaux BODY et HEAD."
         ),
         "require_check": True,
-        "check_text": "Vérifier que les câbles de puissance sont connectés aux sorties BODY et HEAD.",
+        "check_text": "Vérifier que le wattmètre est connecté et que les sorties BODY/HEAD sont correctement câblées.",
         "caption": "",
+        "enable_subtests_on_run": True,
+        "locked_subtests": ["Réglage final BODY", "Réglage final HEAD"],
+        "unlock_when_subtests_done": ["Pré-réglage BODY"],
+        "subtests": [
+            {"method": "run_factory_gain_step_1_pre_body", "label": "Pré-réglage BODY"},
+            {"method": "run_factory_gain_step_2_body_final", "label": "Réglage final BODY"},
+            {"method": "run_factory_gain_step_3_head_final", "label": "Réglage final HEAD"}
+        ],
     },
     "Noise blanked": {
         "display_name": "Mesure de bruit blanké",

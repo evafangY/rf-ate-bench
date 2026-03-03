@@ -1,0 +1,5 @@
+[flake8]
+max-line-length = 120
+max-complexity = 15
+exclude = .git,__pycache__,ATE_Lib_AN8103,venv,build,dist
+ignore = E203, W503

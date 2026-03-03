@@ -1,4 +1,3 @@
-import datetime
 import math
 from dataclasses import dataclass
 from typing import Optional, Union, List
@@ -13,7 +12,7 @@ class TestResult:
     max_spec: Optional[float]
     status: str  # "PASS", "FAIL", "INFO"
 
-from .error_codes import ERROR_CODES, ERROR_HINTS, decode_error
+from .error_codes import ERROR_CODES, ERROR_HINTS
 from .specs import PERFORMANCE_SPECS, DIAGNOSTIC_SPECS, DIAGNOSTIC_EXCLUDED_BIASES
 
 def run_diagnostic(ate):
@@ -470,44 +469,186 @@ def run_performance_test(ate):
     if any(r.status == "FAIL" for r in results):
         ok = False
 
-    # Return structured results
-    # We return results as the first element instead of lines (or handle it in phase_controller)
-    # But wait, phase_controller expects lines, ok, values OR results, ok
-    # If we return results, ok, then phase_controller needs to know.
-    # But run_performance_test is called by phase_controller which expects specific unpacking.
-    # Let's verify phase_controller.
-    
     return results, ok
 
 
-#Régler la sortie de puissance nominal avec RF in  à 3.5 dBm.
-def run_configuration_finale(ate, interaction_callback=None):
-    lines = []
-    ok = True
-    lines.append("Réglage de la sortie de l'input conditioner à 3.5 dB.")
+def _step6_in_spec(measured, target, tol):
+    return measured is not None and abs(measured - target) <= tol
+
+
+def _step6_configure_input(ate, mode, input_dbm):
+    if ate is None:
+        return True
     try:
         if hasattr(ate, "comm"):
             try:
                 ate.comm.standby()
             except Exception:
                 pass
-        if interaction_callback:
-            msg = (
-                "Veuillez régler la sortie de l'input conditioner à 3.5 dB.\n"
-                "Cliquez sur 'Continuer' une fois le réglage terminé."
-            )
-            interaction_callback(msg)
-        lines.append("Réglage 3.5 dB terminé.")
-        if hasattr(ate, "poweroff"):
-            try:
-                ate.poweroff()
-            except Exception:
-                pass
+            if mode == "head" and hasattr(ate.comm, "head"):
+                ate.comm.head()
+            elif hasattr(ate.comm, "body"):
+                ate.comm.body()
+        if hasattr(ate, "rf") and hasattr(ate.rf, "config") and hasattr(ate.rf, "operate"):
+            ate.rf.config(str(input_dbm), "")
+            ate.rf.operate()
+        return True
     except Exception:
-        ok = False
-        lines.append("Erreur pendant le réglage de la sortie 3.5 dB.")
+        return False
+
+
+def _step6_ate_measure(ate, mode):
+    if ate is not None and hasattr(ate, "gain_tuning_power_measure"):
+        try:
+            return float(ate.gain_tuning_power_measure(mode))
+        except Exception:
+            return None
+    return None
+
+
+def _step6_normalize_response(response, last_measured):
+    if isinstance(response, dict):
+        action = response.get("action", "measure")
+        measured = response.get("measured_dbm", last_measured)
+        try:
+            measured = float(measured) if measured is not None else None
+        except Exception:
+            measured = last_measured
+        return action, measured
+    if isinstance(response, bool):
+        return ("measure", last_measured) if response else ("continue", last_measured)
+    return "continue", last_measured
+
+
+def _run_step6_stage(ate, interaction_callback, stage_id, title, instruction, mode, target_dbm, tol=0.2, required_count=3):
+    measured = None
+    stable_count = 0
+    allow_auto_measure = ate is not None and hasattr(ate, "gain_tuning_power_measure")
+    if not interaction_callback:
+        measured = _step6_ate_measure(ate, mode)
+        stable_count = required_count if _step6_in_spec(measured, target_dbm, tol) else 0
+        return measured, stable_count >= required_count, False, stable_count
+    while True:
+        status = "OK" if _step6_in_spec(measured, target_dbm, tol) else "HORS SPEC"
+        response = interaction_callback({
+            "type": "step6_gain_adjust",
+            "stage": stage_id,
+            "title": title,
+            "instruction": instruction,
+            "target_dbm": target_dbm,
+            "tolerance_db": tol,
+            "measured_dbm": measured,
+            "status": status,
+            "stable_count": stable_count,
+            "required_count": required_count,
+            "allow_auto_measure": allow_auto_measure,
+        })
+        action, measured = _step6_normalize_response(response, measured)
+        if action == "abort":
+            return measured, False, True, stable_count
+        if action == "auto_measure":
+            auto_val = _step6_ate_measure(ate, mode)
+            if auto_val is not None:
+                measured = auto_val
+        if action in ("measure", "auto_measure"):
+            stable_count = stable_count + 1 if _step6_in_spec(measured, target_dbm, tol) else 0
+            continue
+        if action == "continue" and _step6_in_spec(measured, target_dbm, tol) and stable_count >= required_count:
+            return measured, True, False, stable_count
+
+
+def _run_step6_subtest(ate, interaction_callback, *, step_id, stage_id, title, label, mode, input_dbm, target_dbm, tol=0.2, required_count=3):
+    results = []
+    if not _step6_configure_input(ate, mode, input_dbm):
+        results.append(TestResult(step_id, f"{label} - configuration", "FAIL", "", None, None, "FAIL"))
+        return results, False
+    instruction = f"{label}: entrée {input_dbm:.1f} dBm, cible {target_dbm:.1f} dBm ±{tol:.1f} dB, {required_count} mesures consécutives valides."
+    measured, ok, aborted, hits = _run_step6_stage(ate, interaction_callback, stage_id, title, instruction, mode, target_dbm, tol, required_count)
+    status = "OK" if ok and not aborted else "FAIL"
+    results.append(TestResult(step_id, f"{label} - sortie", measured if measured is not None else "N/A", "dBm", target_dbm - tol, target_dbm + tol, status))
+    if measured is not None:
+        gain_val = measured - input_dbm
+        results.append(TestResult(f"{step_id}G", f"{label} - gain", round(gain_val, 3), "dB", None, None, status))
+    results.append(TestResult(f"{step_id}H", f"{label} - mesures consécutives", hits, "count", required_count, None, status))
+    return results, ok and not aborted
+
+
+def run_factory_gain_step_1_pre_body(ate, interaction_callback=None):
+    results, ok = _run_step6_subtest(
+        ate,
+        interaction_callback,
+        step_id="15001",
+        stage_id="factory_pre_body",
+        title="Step 6 - Pré-réglage BODY",
+        label="Pré-réglage BODY",
+        mode="body",
+        input_dbm=0.0,
+        target_dbm=68.5,
+    )
+    if ate is not None and results:
+        for r in results:
+            if r.test_id == "15001" and isinstance(r.value, (int, float)):
+                ate.step6_pre_body_output_dbm = float(r.value)
+    return results, ok
+
+
+def run_factory_gain_step_2_body_final(ate, interaction_callback=None):
+    results, ok = _run_step6_subtest(
+        ate,
+        interaction_callback,
+        step_id="15002",
+        stage_id="factory_body_final",
+        title="Step 6 - Réglage final BODY",
+        label="Réglage final BODY",
+        mode="body",
+        input_dbm=3.5,
+        target_dbm=72.0,
+    )
+    if ate is not None and results:
+        for r in results:
+            if r.test_id == "15002" and isinstance(r.value, (int, float)):
+                ate.step6_body_output_dbm = float(r.value)
+            if r.test_id == "15002G" and isinstance(r.value, (int, float)):
+                ate.step6_body_gain_db = float(r.value)
+    return results, ok
+
+
+def run_factory_gain_step_3_head_final(ate, interaction_callback=None):
+    results, ok = _run_step6_subtest(
+        ate,
+        interaction_callback,
+        step_id="15003",
+        stage_id="factory_head_final",
+        title="Step 6 - Réglage final HEAD",
+        label="Réglage final HEAD",
+        mode="head",
+        input_dbm=3.5,
+        target_dbm=63.5,
+    )
+    if ate is not None and results:
+        for r in results:
+            if r.test_id == "15003" and isinstance(r.value, (int, float)):
+                ate.step6_head_output_dbm = float(r.value)
+            if r.test_id == "15003G" and isinstance(r.value, (int, float)):
+                ate.step6_head_gain_db = float(r.value)
+    return results, ok
+
+
+def run_configuration_finale(ate, interaction_callback=None):
+    lines = []
     values = {}
-    return lines, ok, values
+    r1, ok1 = run_factory_gain_step_1_pre_body(ate, interaction_callback)
+    r2, ok2 = run_factory_gain_step_2_body_final(ate, interaction_callback) if ok1 else ([], False)
+    r3, ok3 = run_factory_gain_step_3_head_final(ate, interaction_callback) if ok2 else ([], False)
+    all_results = r1 + r2 + r3
+    for r in all_results:
+        lines.append(f"{r.label}: {r.value} {r.unit} [{r.status}]")
+    values["step6_pre_body_output_dbm"] = getattr(ate, "step6_pre_body_output_dbm", None)
+    values["step6_body_output_dbm"] = getattr(ate, "step6_body_output_dbm", None)
+    values["step6_head_output_dbm"] = getattr(ate, "step6_head_output_dbm", None)
+    values["step6_body_gain_db"] = getattr(ate, "step6_body_gain_db", None)
+    values["step6_head_gain_db"] = getattr(ate, "step6_head_gain_db", None)
+    return lines, (ok1 and ok2 and ok3), values
 
 
 def run_noise_blanked(ate):
@@ -537,5 +678,7 @@ def build_subtest_registry(ate, interaction_callback=None):
         "run_input_tuning_step_4": lambda: run_input_tuning_step_4(ate, interaction_callback),
         "run_input_tuning_step_0dbm_body": lambda: run_input_tuning_step_0dbm_body(ate, interaction_callback),
         "run_input_tuning_step_0dbm_head": lambda: run_input_tuning_step_0dbm_head(ate, interaction_callback),
+        "run_factory_gain_step_1_pre_body": lambda: run_factory_gain_step_1_pre_body(ate, interaction_callback),
+        "run_factory_gain_step_2_body_final": lambda: run_factory_gain_step_2_body_final(ate, interaction_callback),
+        "run_factory_gain_step_3_head_final": lambda: run_factory_gain_step_3_head_final(ate, interaction_callback),
     }
-

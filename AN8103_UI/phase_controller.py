@@ -15,9 +15,6 @@ from .phase_services import (
 from .specs import PERFORMANCE_SPECS
 
 
-
-
-
 def make_phase_runner(phase_name, ate, interaction_callback=None):
     def runner():
         result_phases = {
