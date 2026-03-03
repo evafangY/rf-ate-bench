@@ -664,6 +664,8 @@ class MainWindow(QWidget):
             phase_name = PHASES[index]
             self.phase_ok[phase_name] = ok
             self.menu_page.set_phase_status(index, ok)
+            # Ensure the button is enabled so the user can re-run the test if needed
+            self.menu_page.set_phase_enabled(index, True)
 
     def start_sequence(self, technician_info, dut_info):
         self.eng_mode = False

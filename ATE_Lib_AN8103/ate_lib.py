@@ -507,6 +507,269 @@ class ate_init:
             gui.close()
             raise
 
+
+    def fidelity_measure_wip(self):
+        '''
+        Fidelity measure using VNA trace -> gain/phase non-linearity (pk-pk) and differential gain/phase (worst-case value)
+        Pass/Fail can be done by directly comparing each test_id_xxxxx to the immutable [LSL, USL] in your matrix.
+
+        Assumptions:
+        - VNA sweep is a power ramp with constant step in dB (Pin_step_db).
+        - The VNA configuration (forward/reverse) defines the ramp; you must set the correct Pin_start_db and Pin_stop_db
+        for each direction below.
+    
+        Fidelity measure using VNA trace -> gain/phase non-linearity (pk-pk) and differential gain/phase (worst-case value)
+        Pass/Fail can be done by directly comparing each
+        '''
+        # ---- Constants to align with your spec table ----
+        PIN_STEP_DB = 0.15
+
+        # These MUST match your VNA power ramp configuration.
+        # Set them once correctly and you can delete all magic indices forever.
+        FORWARD_PIN_START_DBM = -40.0
+        FORWARD_PIN_STOP_DBM  = 0.0
+
+        REVERSE_PIN_START_DBM = -40.0
+        REVERSE_PIN_STOP_DBM  = 0.0
+
+        # Spec (immutable) used only to compute the single representative value for differential tests.
+        SPEC = {
+            # Forward
+            13206: (-0.10,  0.10),
+            13207: (-0.20,  0.10),
+            13208: (-0.30,  0.10),
+            13210: (-0.50,  0.50),
+            13211: (-1.75,  0.50),
+            13212: (-3.00,  0.50),
+            # Reverse
+            13214: (-0.10,  0.10),
+            13215: (-0.20,  0.10),
+            13216: (-0.30,  0.10),
+            13218: (-0.50,  0.50),
+            13219: (-1.75,  0.50),
+            13220: (-3.00,  0.50),
+        }
+
+        def _safe_close_gui(gui_obj):
+            try:
+                gui_obj.close()
+            except Exception:
+                pass
+
+        def _build_pin_axis(n_points: int, pin_start_dbm: float, pin_stop_dbm: float, step_db: float) -> numpy.ndarray:
+            """
+            Create Pin axis. Prefer deriving from start/step to avoid cumulative float drift.
+            We trust that n_points matches the configured sweep.
+            """
+            pin = pin_start_dbm + step_db * numpy.arange(n_points, dtype=float)
+            # Optional: sanity warning if stop doesn't align (won't break)
+            expected_stop = pin_start_dbm + step_db * (n_points - 1)
+            if abs(expected_stop - pin_stop_dbm) > 1.0:  # loose guardrail
+                logging.warning(
+                    "Pin axis stop mismatch: expected %.3f dBm from (start+step*(N-1)) but configured stop is %.3f dBm",
+                    expected_stop, pin_stop_dbm
+                )
+            return pin
+
+        def _pk_pk_normalized(y: numpy.ndarray, pin: numpy.ndarray, pin_ref_dbm: float, pin_min_dbm: float, pin_max_dbm: float) -> float:
+            """
+            pk-pk of normalized curve over [pin_min_dbm, pin_max_dbm].
+            Normalization: y_norm = y - y(pin_ref_dbm).
+            """
+            y = numpy.asarray(y, dtype=float)
+            # reference index: closest to pin_ref_dbm
+            iref = int(numpy.argmin(numpy.abs(pin - pin_ref_dbm)))
+            y_norm = y - y[iref]
+
+            mask = (pin >= pin_min_dbm) & (pin <= pin_max_dbm)
+            if not numpy.any(mask):
+                raise ValueError("No points in pk-pk range [%s, %s] dBm" % (pin_min_dbm, pin_max_dbm))
+
+            seg = y_norm[mask]
+            return float(numpy.max(seg) - numpy.min(seg))
+
+        def _worst_value_for_interval(arr: numpy.ndarray, lsl: float, usl: float) -> float:
+            """
+            Return ONE scalar (same unit as arr) such that:
+            - If any point violates [lsl, usl], returned value is OUTSIDE [lsl, usl] (FAIL by direct compare).
+            - If all points are within [lsl, usl], returned value is WITHIN [lsl, usl] (PASS by direct compare).
+            This enables keeping your spec unchanged while outputting a single numeric test result.
+            """
+            arr = numpy.asarray(arr, dtype=float)
+            mn = float(numpy.min(arr))
+            mx = float(numpy.max(arr))
+
+            low_fail = mn < lsl
+            high_fail = mx > usl
+
+            if low_fail and high_fail:
+                # Choose the side with larger violation magnitude.
+                if (lsl - mn) >= (mx - usl):
+                    return mn
+                return mx
+            if low_fail:
+                return mn
+            if high_fail:
+                return mx
+
+            # All inside spec: return the value closest to a boundary (worst margin but still pass).
+            if (mn - lsl) <= (usl - mx):
+                return mn
+            return mx
+
+        def _slice_by_pin(arr: numpy.ndarray, pin: numpy.ndarray, pin_min_dbm: float, pin_max_dbm: float) -> numpy.ndarray:
+            mask = (pin >= pin_min_dbm) & (pin <= pin_max_dbm)
+            if not numpy.any(mask):
+                raise ValueError("No points in interval [%s, %s] dBm" % (pin_min_dbm, pin_max_dbm))
+            return numpy.asarray(arr, dtype=float)[mask]
+
+        def _compute_metrics_from_s21(s21_raw: str, pin_start_dbm: float, pin_stop_dbm: float):
+            """
+            Parse VNA S21 trace and compute:
+            - gain_dB
+            - phase_deg (UNWRAPPED)
+            - d(gain)/dPin, d(phase)/dPin
+            - Pin axis
+            """
+            z = self.vna.parse_data(s21_raw)  # complex array
+            z = numpy.asarray(z)
+
+            gain_db = 20.0 * numpy.log10(numpy.abs(z))
+            phase_deg = numpy.degrees(numpy.unwrap(numpy.angle(z)))  # critical for stable differential phase
+
+            n = len(gain_db)
+            pin = _build_pin_axis(n, pin_start_dbm, pin_stop_dbm, PIN_STEP_DB)
+
+            gain_diff = numpy.gradient(gain_db, PIN_STEP_DB)     # dB/dB
+            phase_diff = numpy.gradient(phase_deg, PIN_STEP_DB)  # deg/dB
+            return gain_db, gain_diff, phase_deg, phase_diff, pin
+
+        def _compute_forward_tests(gain_db, gain_diff, phase_deg, phase_diff, pin):
+            # Abs gain non-linearity (pk-pk normalized, -40 to 0 dBm)
+            self.test_id_13205 = _pk_pk_normalized(gain_db, pin, pin_ref_dbm=-40.0, pin_min_dbm=-40.0, pin_max_dbm=0.0)
+            
+            # --- SIMPLE DEBUG for the failing range (-40..-3) ---
+            _log_segment_minmax("DBG13206 FWD DG", gain_diff, pin, -40.0, -3.0)
+            _log_segment_minmax("DBG13210 FWD DP", phase_diff, pin, -40.0, -3.0)
+            # Differential gain representative values (single scalar comparable to spec)
+            self.test_id_13206 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin, -40.0, -3.0), *SPEC[13206])
+            self.test_id_13207 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin,  -3.0, -1.0), *SPEC[13207])
+            self.test_id_13208 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin,  -1.0,  0.0), *SPEC[13208])
+
+            # Abs phase non-linearity (pk-pk normalized, -40 to 0 dBm)
+            self.test_id_13209 = _pk_pk_normalized(phase_deg, pin, pin_ref_dbm=-40.0, pin_min_dbm=-40.0, pin_max_dbm=0.0)
+
+            # Differential phase representative values
+            self.test_id_13210 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin, -40.0, -3.0), *SPEC[13210])
+            self.test_id_13211 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin,  -3.0, -1.0), *SPEC[13211])
+            self.test_id_13212 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin,  -1.0,  0.0), *SPEC[13212])
+
+        def _compute_reverse_tests(gain_db, gain_diff, phase_deg, phase_diff, pin):
+            self.test_id_13213 = _pk_pk_normalized(gain_db, pin, pin_ref_dbm=-40.0, pin_min_dbm=-40.0, pin_max_dbm=0.0)
+            _log_segment_minmax("DBG13214 REV DG", gain_diff, pin, -40.0, -3.0)
+            _log_segment_minmax("DBG13218 REV DP", phase_diff, pin, -40.0, -3.0)
+            self.test_id_13214 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin, -40.0, -3.0), *SPEC[13214])
+            self.test_id_13215 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin,  -3.0, -1.0), *SPEC[13215])
+            self.test_id_13216 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin,  -1.0,  0.0), *SPEC[13216])
+
+            self.test_id_13217 = _pk_pk_normalized(phase_deg, pin, pin_ref_dbm=-40.0, pin_min_dbm=-40.0, pin_max_dbm=0.0)
+
+            self.test_id_13218 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin, -40.0, -3.0), *SPEC[13218])
+            self.test_id_13219 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin,  -3.0, -1.0), *SPEC[13219])
+            self.test_id_13220 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin,  -1.0,  0.0), *SPEC[13220])
+
+        def _log_segment_minmax(tag: str, arr: numpy.ndarray, pin: numpy.ndarray, p0: float, p1: float):
+            mask = (pin >= p0) & (pin <= p1)
+            if not numpy.any(mask):
+                logging.info("%s: empty segment Pin[%.2f..%.2f]", tag, p0, p1)
+                return
+
+            seg = numpy.asarray(arr, dtype=float)[mask]
+            pin_seg = numpy.asarray(pin, dtype=float)[mask]
+
+            mn = float(numpy.min(seg)); mx = float(numpy.max(seg))
+            i_mn = int(numpy.argmin(seg)); i_mx = int(numpy.argmax(seg))
+
+            logging.info(
+                "%s Pin[%.2f..%.2f]: min=%.4f at Pin=%.2f, max=%.4f at Pin=%.2f",
+                tag, p0, p1, mn, float(pin_seg[i_mn]), mx, float(pin_seg[i_mx])
+            )
+
+        gui = None
+        try:
+            gui = progress_window("Fidelity measure status")
+            logging.info("Starting fidelity measure")
+
+            # ---------- Forward ramp ----------
+            gui.set_status("Setting the amplifier in standby", 10); self.comm.standby()
+            gui.set_status("Setting the switches", 2); self.sw.config("vna_body")
+            gui.set_status("Setting the scope", 4); self.scope.config("")
+            gui.set_status("Setting the unblanking generator", 8); self.en.config("0.2", "4.5")
+
+            gui.set_status("Loading VNA configuration (forward)", 6); self.vna.visa.write(ate_config.load_fidelity_forward)
+            gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
+            gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
+            gui.set_status("Turning on blanking signals", 9); self.en.operate()
+
+            gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
+            gui.set_status("Acquiring VNA data (forward)", 10)
+            s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
+
+            (self.forward_s21_mag,
+            self.forward_s21_mag_diff,
+            self.forward_s21_phase,
+            self.forward_s21_phase_diff,
+            forward_pin) = _compute_metrics_from_s21(
+                s21_raw, FORWARD_PIN_START_DBM, FORWARD_PIN_STOP_DBM
+            )
+
+            _compute_forward_tests(self.forward_s21_mag,
+                                self.forward_s21_mag_diff,
+                                self.forward_s21_phase,
+                                self.forward_s21_phase_diff,
+                                forward_pin)
+
+            # ---------- Reverse ramp ----------
+            gui.set_status("Loading VNA configuration (reverse)", 6); self.vna.visa.write(ate_config.load_fidelity_reverse)
+            gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
+
+            gui.set_status("Acquiring VNA data (reverse)", 10)
+            s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
+
+            (self.reverse_s21_mag,
+            self.reverse_s21_mag_diff,
+            self.reverse_s21_phase,
+            self.reverse_s21_phase_diff,
+            reverse_pin) = _compute_metrics_from_s21(
+                s21_raw, REVERSE_PIN_START_DBM, REVERSE_PIN_STOP_DBM
+            )
+
+            _compute_reverse_tests(self.reverse_s21_mag,
+                                self.reverse_s21_mag_diff,
+                                self.reverse_s21_phase,
+                                self.reverse_s21_phase_diff,
+                                reverse_pin)
+
+            # Bring system back to safe state after acquisition
+            gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
+            gui.set_status("Turning off the unblanking generator", 18); self.en.poweroff()
+
+            _safe_close_gui(gui)
+            logging.info("Fidelity measure completed")
+
+        except Exception:
+            if gui is not None:
+                try:
+                    gui.set_status("Error occured during fidelity measure, turning off the ATE", 0)
+                except Exception:
+                    pass
+            logging.warning("Error while performing fidelity measure")
+            try:
+                self.emergency_stop()
+            finally:
+                if gui is not None:
+                    _safe_close_gui(gui)
+            raise
     def stress(self, sequence):
         try:
             gui = progress_window(f"Stress sequence {sequence}"); logging.info("Starting stress sequence %s measure", sequence)

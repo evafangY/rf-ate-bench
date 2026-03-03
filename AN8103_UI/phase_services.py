@@ -455,6 +455,17 @@ def run_performance_test(ate):
         # values = {}
         return lines, ok
     
+    if test_exception:
+        results.insert(0, TestResult(
+            test_id="CRASH",
+            label=f"Erreur critique: {test_exception}",
+            value="ERROR",
+            unit="",
+            min_spec=None,
+            max_spec=None,
+            status="FAIL"
+        ))
+
     # Check overall status
     if any(r.status == "FAIL" for r in results):
         ok = False
