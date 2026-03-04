@@ -1,5 +1,6 @@
 from AN8103_UI.specs import PERFORMANCE_SPECS
 from .test_result import TestResult
+from ..test_utils import create_test_result
 
 def run_performance_test(ate):
     lines = []
@@ -21,47 +22,24 @@ def run_performance_test(ate):
     
     results = []
     def add_result(attr, test_id, label, unit):
-        # Default values if attribute is missing
-        val = "N/A"
-        status = "FAIL"
-        spec_min = None
-        spec_max = None
-        
-        # Get spec info first
-        spec = PERFORMANCE_SPECS.get(test_id)
-        if spec:
-            label = spec[0]
-            unit = spec[1]
-            spec_min = spec[2]
-            spec_max = spec[3]
+        val = "MISSING"
+        status_override = None
 
         if hasattr(ate, attr):
             val = getattr(ate, attr)
-            # If val is None, treat as missing/fail
             if val is None:
                 val = "N/A"
-                status = "FAIL"
-            else:
-                # Check against specs
-                status = "OK"
-                if spec_min is not None and val < spec_min:
-                    status = "FAIL"
-                if spec_max is not None and val > spec_max:
-                    status = "FAIL"
+                status_override = "FAIL"
         else:
-            # Attribute missing -> FAIL (CRASH/MISSING)
-            status = "FAIL"
-            val = "MISSING"
+            status_override = "FAIL"
+
+        # create_test_result will look up specs (label/unit/limits) automatically
+        res, ok = create_test_result(test_id, label, val, unit)
+        
+        if status_override:
+            res.status = status_override
             
-        results.append(TestResult(
-            test_id=test_id,
-            label=label,
-            value=val,
-            unit=unit,
-            min_spec=spec_min,
-            max_spec=spec_max,
-            status=status
-        ))
+        results.append(res)
 
     add_result("test_id_13301", "13301", "Single pulse drop", "dB")
     add_result("test_id_13302", "13302", "Gain inter pulse stability", "dB")

@@ -1,4 +1,5 @@
 import math
+from ..test_utils import create_test_result
 from .test_result import TestResult
 
 def _run_single_input_tuning_step(ate, interaction_callback, mode, input_dbm, _target, tol, label, step_index):
@@ -22,50 +23,63 @@ def _run_single_input_tuning_step(ate, interaction_callback, mode, input_dbm, _t
     
     # 1. Setup and Measure (Initial)
     vals = None
-    if hasattr(ate, "input_tuning"):
-        try:
-            vals = ate.input_tuning(mode, input_dbm)
-            current_val = vals[channel_idx]
-        except Exception:
-            pass
-    
-    # 2. Loop for manual adjustment
-    while True:
-        # Check if within spec
-        diff = abs(current_val - target)
-        in_spec = diff <= tol
-        status_str = "PASS" if in_spec else "FAIL"
+    try:
+        if hasattr(ate, "input_tuning"):
+            try:
+                vals = ate.input_tuning(mode, input_dbm)
+                current_val = vals[channel_idx]
+            except Exception:
+                pass
+        
+        # 2. Loop for manual adjustment
+        while True:
+            # Check if within spec
+            diff = abs(current_val - target)
+            in_spec = diff <= tol
+            status_str = "PASS" if in_spec else "FAIL"
 
-        # Check channel difference
-        diff_error = ""
-        if vals and len(vals) >= 2:
-            ch_diff = abs(vals[0] - vals[1])
-            if ch_diff > 0.2:
-                diff_error = f"\n\nERREUR CRITIQUE: Différence entre canaux > 0.2dB ({ch_diff:.2f}dB)!\nL'entrée de la carte est défectueuse."
-                in_spec = False
-                status_str = "FAIL (DIFF)"
-        
-        msg = (f"{label}\n"
-               f"Sortie cible : {target} +/- {tol} dBm ({vpp_mv:.0f} mVpp)\n"
-               f"Sortie actuelle : {current_val:.2f} dBm ({status_str}){diff_error}\n\n"
-               f"Veuillez ajuster le gain du mode {mode.upper()} manuellement pour que l'osicilloscope mesure {vpp_mv:.0f} mVpp.\n"
-               "Cliquez sur 'Mesurer' pour mesurer à nouveau.\n"
-               "Cliquez sur 'Continuer' pour terminer cette étape.")
-        
-        retry = False
-        if interaction_callback:
-            retry = interaction_callback(msg)
-        
-        if retry:
-            if hasattr(ate, "input_tuning"):
-                try:
-                    vals = ate.input_tuning(mode, input_dbm)
-                    current_val = vals[channel_idx]
-                except Exception:
-                    pass
-            continue
-        else:
-            break
+            # Check channel difference
+            diff_error = ""
+            if vals and len(vals) >= 2:
+                ch_diff = abs(vals[0] - vals[1])
+                if ch_diff > 0.2:
+                    diff_error = f"\n\nERREUR CRITIQUE: Différence entre canaux > 0.2dB ({ch_diff:.2f}dB)!\nL'entrée de la carte est défectueuse."
+                    in_spec = False
+                    status_str = "FAIL (DIFF)"
+            
+            msg = (f"{label}\n"
+                   f"Sortie cible : {target} +/- {tol} dBm ({vpp_mv:.0f} mVpp)\n"
+                   f"Sortie actuelle : {current_val:.2f} dBm ({status_str}){diff_error}\n\n"
+                   f"Veuillez ajuster le gain du mode {mode.upper()} manuellement pour que l'osicilloscope mesure {vpp_mv:.0f} mVpp.\n"
+                   "Cliquez sur 'Mesurer' pour mesurer à nouveau.\n"
+                   "Cliquez sur 'Continuer' pour terminer cette étape.")
+            
+            retry = False
+            if interaction_callback:
+                retry = interaction_callback(msg)
+            
+            if retry:
+                if hasattr(ate, "input_tuning"):
+                    try:
+                        vals = ate.input_tuning(mode, input_dbm)
+                        current_val = vals[channel_idx]
+                    except Exception:
+                        pass
+                continue
+            else:
+                break
+    finally:
+        # Ensure signals are turned off after the step (whether passed, failed, or aborted)
+        if ate:
+            if hasattr(ate, "rf") and hasattr(ate.rf, "poweroff"):
+                try: ate.rf.poweroff()
+                except: pass
+            if hasattr(ate, "en") and hasattr(ate.en, "poweroff"):
+                try: ate.en.poweroff()
+                except: pass
+            if hasattr(ate, "comm") and hasattr(ate.comm, "standby"):
+                try: ate.comm.standby()
+                except: pass
     
     # Final check for this step
     in_spec = abs(current_val - target) <= tol
@@ -126,15 +140,11 @@ def run_input_conditional_board_tuning(ate, interaction_callback=None):
             
     # Final Result for Test ID 12001
     status = "OK" if all_steps_passed else "FAIL"
+    val = "PASS" if all_steps_passed else "FAIL"
     
-    results.append(TestResult(
-        test_id="12001",
-        label="Gain/attenuation adjustment range (-10 to +4 dB)",
-        value="PASS" if all_steps_passed else "FAIL",
-        unit="", # Binary/Boolean result
-        min_spec=None,
-        max_spec=None,
-        status=status
-    ))
+    # create_test_result will fetch label and unit from specs (INPUT_COND_SPECS)
+    res, _ = create_test_result("12001", "", val, "")
+    res.status = status
+    results.append(res)
     
     return results, all_steps_passed

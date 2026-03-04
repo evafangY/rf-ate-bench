@@ -9,6 +9,24 @@ def _gain_configure_input(ate, mode, input_dbm):
     if ate is None:
         return True
     try:
+        # Configure Switch Matrix
+        if hasattr(ate, "sw") and hasattr(ate.sw, "config"):
+            ate.sw.config(f"scope_{mode}")
+
+        # Configure Scope
+        if hasattr(ate, "scope") and hasattr(ate.scope, "config"):
+            ate.scope.config("power")
+
+        # Configure Unblanking Generator (EN) - 1ms period, 0.4ms duty (matching gain_tuning)
+        if hasattr(ate, "en") and hasattr(ate.en, "config") and hasattr(ate.en, "operate"):
+            ate.en.config("1", "0.4")
+            ate.en.operate()
+
+        # Configure RF Generator - Gated mode (matching gain_tuning)
+        if hasattr(ate, "rf") and hasattr(ate.rf, "config") and hasattr(ate.rf, "operate"):
+            ate.rf.config(str(input_dbm), "gated")
+            ate.rf.operate()
+
         if hasattr(ate, "comm"):
             try:
                 ate.comm.standby()
@@ -18,9 +36,7 @@ def _gain_configure_input(ate, mode, input_dbm):
                 ate.comm.head()
             elif hasattr(ate.comm, "body"):
                 ate.comm.body()
-        if hasattr(ate, "rf") and hasattr(ate.rf, "config") and hasattr(ate.rf, "operate"):
-            ate.rf.config(str(input_dbm), "")
-            ate.rf.operate()
+        
         return True
     except Exception:
         return False
@@ -123,28 +139,41 @@ def _run_gain_stage(ate, interaction_callback, stage_id, title, instruction, mod
 
 def _run_gain_subtest(ate, interaction_callback, *, step_id, stage_id, title, label, mode, input_dbm, target_dbm, tol=0.2, required_count=1, allow_manual_measure=True):
     results = []
-    if not _gain_configure_input(ate, mode, input_dbm):
-        results.append(TestResult(step_id, f"{label} - configuration", "FAIL", "", None, None, "FAIL"))
-        return results, False
-    
-    if required_count > 1:
-        instruction = f"{label}: entrée {input_dbm:.1f} dBm, cible {target_dbm:.1f} dBm ±{tol:.1f} dB, {required_count} mesures consécutives valides."
-    else:
-        instruction = f"{label}: entrée {input_dbm:.1f} dBm, cible {target_dbm:.1f} dBm ±{tol:.1f} dB, validation immédiate."
+    try:
+        if not _gain_configure_input(ate, mode, input_dbm):
+            results.append(TestResult(step_id, f"{label} - configuration", "FAIL", "", None, None, "FAIL"))
+            return results, False
         
-    measured, ok, aborted, hits = _run_gain_stage(ate, interaction_callback, stage_id, title, instruction, mode, target_dbm, tol, required_count, allow_manual_measure)
-    status = "OK" if ok and not aborted else "FAIL"
-    
-    results.append(TestResult(step_id, f"{label} - sortie", measured if measured is not None else "N/A", "dBm", target_dbm - tol, target_dbm + tol, status))
-    if measured is not None:
-        gain_val = measured - input_dbm
-        results.append(TestResult(f"{step_id}G", f"{label} - gain", round(gain_val, 3), "dB", None, None, status))
-    
-    # Only show consecutive count if it matters (more than 1 required)
-    if required_count > 1:
-        results.append(TestResult(f"{step_id}H", f"{label} - mesures consécutives", hits, "count", required_count, None, status))
+        if required_count > 1:
+            instruction = f"{label}: entrée {input_dbm:.1f} dBm, cible {target_dbm:.1f} dBm ±{tol:.1f} dB, {required_count} mesures consécutives valides."
+        else:
+            instruction = f"{label}: entrée {input_dbm:.1f} dBm, cible {target_dbm:.1f} dBm ±{tol:.1f} dB, validation immédiate."
+            
+        measured, ok, aborted, hits = _run_gain_stage(ate, interaction_callback, stage_id, title, instruction, mode, target_dbm, tol, required_count, allow_manual_measure)
+        status = "OK" if ok and not aborted else "FAIL"
         
-    return results, ok and not aborted
+        results.append(TestResult(step_id, f"{label} - sortie", measured if measured is not None else "N/A", "dBm", target_dbm - tol, target_dbm + tol, status))
+        if measured is not None:
+            gain_val = measured - input_dbm
+            results.append(TestResult(f"{step_id}G", f"{label} - gain", round(gain_val, 3), "dB", None, None, status))
+        
+        # Only show consecutive count if it matters (more than 1 required)
+        if required_count > 1:
+            results.append(TestResult(f"{step_id}H", f"{label} - mesures consécutives", hits, "count", required_count, None, status))
+            
+        return results, ok and not aborted
+    finally:
+        # Ensure signals are turned off after the subtest
+        if ate:
+            if hasattr(ate, "rf") and hasattr(ate.rf, "poweroff"):
+                try: ate.rf.poweroff()
+                except: pass
+            if hasattr(ate, "en") and hasattr(ate.en, "poweroff"):
+                try: ate.en.poweroff()
+                except: pass
+            if hasattr(ate, "comm") and hasattr(ate.comm, "standby"):
+                try: ate.comm.standby()
+                except: pass
 
 
 def run_factory_gain_pre_body(ate, interaction_callback=None):

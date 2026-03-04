@@ -54,6 +54,8 @@ class FakeATE:
                 "error": 0,
                 "Gai": 69.0,
                 "biasQ20": 500,
+                "temp1": 25.0,
+                "temp2": 28.0,
             },
         )()
         self.slave = type(
@@ -67,6 +69,8 @@ class FakeATE:
                 "fault": 0,
                 "error": 0,
                 "Gai": 69.0,
+                "temp1": 25.5,
+                "temp2": 28.5,
             },
         )()
 
@@ -191,6 +195,31 @@ class FakeATE:
 
     def harmonic_output_measure(self):
         self.test_id_13201 = -35.0 + random.uniform(-2.0, 2.0)
+
+    def interpulse_stability_measure(self):
+        self.test_id_13302 = -50.0 + random.uniform(-1.0, 1.0)
+        self.test_id_13303 = -40.0 + random.uniform(-1.0, 1.0)
+
+    def gain_flatness_measure(self):
+        self.test_id_13101 = 50.0 + random.uniform(-5.0, 5.0)
+        self.test_id_13106 = 60.0 + random.uniform(-0.5, 0.5)
+
+    def fidelity_measure(self):
+        self.test_id_13205 = 0.40 + random.uniform(-0.1, 0.1)
+
+    def stress(self, sequence_id):
+        val = 1.0 + random.uniform(-0.1, 0.1)
+        if sequence_id == 1: self.test_id_13108 = val
+        elif sequence_id == 2: self.test_id_13109 = val
+        elif sequence_id == 3: self.test_id_13110 = val
+        elif sequence_id == 4: self.test_id_13111 = val
+        elif sequence_id == 5: self.test_id_13112 = val
+
+    def stress_burst(self, sequence_id):
+        val = 1.0 + random.uniform(-0.1, 0.1)
+        if sequence_id == 6: self.test_id_13113 = val
+        elif sequence_id == 7: self.test_id_13114 = val
+        elif sequence_id == 8: self.test_id_13115 = val
 
 
 def main():

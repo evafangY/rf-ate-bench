@@ -144,6 +144,17 @@ PHASE_CONFIG = {
             {"method": "single_pulse_measure", "label": "Mesure single pulse"},
             {"method": "harmonic_output_measure", "label": "Mesure harmonique"},
             {"method": "noise_unblanked_measure", "label": "Mesure bruit blanké"},
+            {"method": "interpulse_stability_measure", "label": "Mesure stabilité inter-pulse"},
+            {"method": "gain_flatness_measure", "label": "Mesure gain flatness"},
+            {"method": "fidelity_measure", "label": "Mesure fidélité"},
+            {"method": "run_stress_1", "label": "Stress 1"},
+            {"method": "run_stress_2", "label": "Stress 2"},
+            {"method": "run_stress_3", "label": "Stress 3"},
+            {"method": "run_stress_4", "label": "Stress 4"},
+            {"method": "run_stress_5", "label": "Stress 5"},
+            {"method": "run_stress_6", "label": "Stress Burst 6"},
+            {"method": "run_stress_7", "label": "Stress Burst 7"},
+            {"method": "run_stress_8", "label": "Stress Burst 8"},
         ],
     },
     "Factory gain reset": {
@@ -161,9 +172,9 @@ PHASE_CONFIG = {
         "locked_subtests": ["Réglage final BODY", "Réglage final HEAD"],
         "unlock_when_subtests_done": ["Pré-réglage BODY"],
         "subtests": [
-            {"method": "run_factory_gain_step_1_pre_body", "label": "Pré-réglage BODY"},
-            {"method": "run_factory_gain_step_2_body_final", "label": "Réglage final BODY"},
-            {"method": "run_factory_gain_step_3_head_final", "label": "Réglage final HEAD"}
+            {"method": "run_factory_gain_pre_body", "label": "Pré-réglage BODY"},
+            {"method": "run_factory_gain_body_final", "label": "Réglage final BODY"},
+            {"method": "run_factory_gain_head_final", "label": "Réglage final HEAD"}
         ],
     },
     "Noise blanked": {

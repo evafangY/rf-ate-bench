@@ -96,16 +96,30 @@ class PhasePage(QWidget):
             layout.addLayout(check_row)
 
         if self.subtests:
-            sub_row = QHBoxLayout()
-            for label, cb in self.subtests:
+            # Create two rows for subtest buttons
+            sub_row1 = QHBoxLayout()
+            sub_row2 = QHBoxLayout()
+            
+            # Determine split point (halfway)
+            count = len(self.subtests)
+            mid = (count + 1) // 2
+            
+            for i, (label, cb) in enumerate(self.subtests):
                 btn = QPushButton(label)
                 btn.setFont(QFont("Arial", 12))
                 btn.clicked.connect(self.make_subtest_handler(cb, label))
                 btn.setEnabled(False)
                 self.subtest_buttons.append(btn)
                 self.subtest_buttons_by_label[label] = btn
-                sub_row.addWidget(btn)
-            layout.addLayout(sub_row)
+                
+                # Add to first or second row based on index
+                if i < mid:
+                    sub_row1.addWidget(btn)
+                else:
+                    sub_row2.addWidget(btn)
+            
+            layout.addLayout(sub_row1)
+            layout.addLayout(sub_row2)
 
         self.result_display = QTextEdit()
         self.result_display.setFont(QFont("Arial", 12))

@@ -33,12 +33,21 @@ try:
 except COMM_Error as comm_e:
     print("")
     print("Amplifier encountered error", hex(comm_e.code), ", please refer to PSP for diagnostic")
+    if 'ate' in locals(): ate.emergency_stop()
 except ATE_Instrument_Error as ate_e:
     print("")
     print("Issue encoutered with", ate_e, " please verify the instrument connections")
+    if 'ate' in locals(): ate.emergency_stop()
 except Exception:
     print("")
     print("MAIN:")
     print("Error seen in main")
     print("launching traceback for debug")
+    if 'ate' in locals(): ate.emergency_stop()
     raise
+finally:
+    if 'ate' in locals():
+        try:
+            ate.poweroff()
+        except:
+            pass
