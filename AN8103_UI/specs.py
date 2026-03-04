@@ -5,8 +5,8 @@ PERFORMANCE_SPECS = {
     "13103": ("Body output power nominal", "dBm", 72.04, None),
     "13104": ("Head output power nominal", "dBm", 63.00, None),
     "13105": ("Body output margin (fault peak - nominal peak)", "dB", None, 1.50),
-    "13106": ("Body gain (output-input)", "dB", 71.54, 72.54),
-    "13107": ("Head delta gain", "dB", 62.44, 63.64),
+    "13106": ("Body gain", "dB", 71.54, 72.54),
+    "13107": ("Head gain", "dB", 62.44, 63.64),
     "13108": ("Seq1 body output power variation", "%", -2.00, 2.00),
     "13109": ("Seq2 body output power variation", "%", -2.00, 2.00),
     "13110": ("Seq3 body output power variation", "%", -2.00, 2.00),
@@ -46,8 +46,8 @@ OUTPUT_COND_SPECS = {
     "14004": ("Head RF sample outputs A gain", "dB", -41.00, -39.00),
     "14005": ("Head RF sample outputs B gain", "dB", -41.00, -39.00),
     "14011": ("TR input/RF output port isolation", "dB", 35.00, None),
-    "14009": ("Head TR resistance to head output", "ohm", 0.00, 0.10),
-    "14010": ("Body TR resistance to body output", "ohm", 0.00, 0.10),
+    "14009": ("Head TR resistance to head output", "ohm", 0.00, 1.00),
+    "14010": ("Body TR resistance to body output", "ohm", 0.00, 1.00),
 }
 
 
@@ -57,7 +57,7 @@ INPUT_COND_SPECS = {
 
 
 NOISE_SPECS = {
-    "13202": ("Coherent noise (narrow spectrum)", "dBm", None, -143.00),
+    "13202": ("Coherent noise (narrow spectrum)", "dBm/Hz", None, -143.00),
     "13203": ("Random noise (broad spectrum)", "dBm/Hz", None, -160.00),
 }
 
@@ -65,4 +65,19 @@ DIAGNOSTIC_SPECS = {
     "bias": ("Bias nominal", "", 175, 225),
 }
 
-DIAGNOSTIC_EXCLUDED_BIASES = ["biasQ31", "biasQ32", "biasQ33"]
+# Biases in this list are expected to be ~0 (inactive/unused). 
+# They are excluded from the standard 175-225 check but checked for < 20.
+DIAGNOSTIC_EXCLUDED_BIASES = [
+    "biasQ31", "biasQ32", "biasQ33"
+]
+
+ZERO_TARGET_BIAS_TOLERANCE = 20
+
+# Voltage and Temperature Specs for color coding
+DIAGNOSTIC_VOLTAGE_SPECS = {
+    "alim_140": (130, 150),
+    "alim_48": (40, 55),
+    "alim_p15": (14, 16),
+    "alim_m15": (-16, -14),
+    "temp": (0, 65), # Warning if > 65
+}

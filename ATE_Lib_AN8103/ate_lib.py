@@ -3,6 +3,7 @@ import pyvisa
 from pyvisa import constants
 from pyvisa.errors import VisaIOError
 import sys
+import os
 import time
 import numpy
 import math
@@ -160,6 +161,26 @@ class ate_init:
             self.emergency_stop();
             raise
     
+    def config_gain_tuning_measure(self, mode):
+        """
+        Configure instruments (Switch Matrix, Scope) for gain tuning power measurement.
+        This separates setup logic from the pure measurement function.
+        """
+        try:
+            # Configure Switch Matrix
+            if hasattr(self, "sw") and hasattr(self.sw, "config"):
+                self.sw.config(f"scope_{mode}")
+                
+            # Configure Scope for Power Measurement
+            if hasattr(self, "scope") and hasattr(self.scope, "config"):
+                self.scope.config("power")
+                
+            logging.info(f"Instruments configured for gain tuning in {mode} mode")
+            return True
+        except Exception as e:
+            logging.warning(f"Failed to configure instruments for gain tuning: {e}")
+            return False
+
     def gain_tuning_power_measure(self, body_head):
         try:
             self.comm.operate()
@@ -211,25 +232,40 @@ class ate_init:
             self.slave.bias()
             self.slave.dac()
     
-    def performance_test (self):
-        gui = progress_window("Performance test status", 1420,10,10); logging.info("starting performance test")
-        gui.set_status("Performing single pulse measure...", 1); self.single_pulse_measure()
-        gui.set_status("Performing harmonic output measure...", 3); self.harmonic_output_measure()
-        gui.set_status("Performing noise ublanked measure...", 5); self.noise_unblanked_measure()
-        gui.set_status("Interpulse stability measure", 7); self.interpulse_stability_measure()
-        gui.set_status("Gain flatness measure", 9); self.gain_flatness_measure()
-        gui.set_status("Fidelity measure", 11); self.fidelity_measure()
-        gui.set_status("Stress sequence 5", 17); self.stress(5)
-        gui.set_status("Stress sequence 4", 27); self.stress(4)
-        gui.set_status("Stress sequence 3", 37); self.stress(3)
-        gui.set_status("Stress sequence 2", 47); self.stress(2)
-        gui.set_status("Stress sequence 1", 57); self.stress(1)
-        gui.set_status("Stress sequence 6", 67); self.stress_burst(6)
-        gui.set_status("Stress sequence 7", 77); self.stress_burst(7)
-        gui.set_status("Stress sequence 8", 87); self.stress_burst(8)
-        gui.set_status("Performance test completed", 100); time.sleep(1)
-        self.poweroff()
-        gui.close()
+    def performance_test(self):
+        gui = progress_window("Performance test status", 1420, 10, 10)
+        logging.info("starting performance test")
+
+        def run_step(desc, progress, func, *args):
+            gui.set_status(desc, progress)
+            try:
+                func(*args)
+            except Exception as e:
+                msg = f"FAILED at step: {desc}. Error: {str(e)}"
+                logging.error(msg)
+                raise Exception(msg) from e
+
+        try:
+            run_step("Performing single pulse measure...", 1, self.single_pulse_measure)
+            run_step("Performing harmonic output measure...", 3, self.harmonic_output_measure)
+            run_step("Performing noise ublanked measure...", 5, self.noise_unblanked_measure)
+            run_step("Interpulse stability measure", 7, self.interpulse_stability_measure)
+            run_step("Gain flatness measure", 9, self.gain_flatness_measure)
+            run_step("Fidelity measure", 11, self.fidelity_measure)
+            run_step("Stress sequence 5", 17, self.stress, 5)
+            run_step("Stress sequence 4", 27, self.stress, 4)
+            run_step("Stress sequence 3", 37, self.stress, 3)
+            run_step("Stress sequence 2", 47, self.stress, 2)
+            run_step("Stress sequence 1", 57, self.stress, 1)
+            run_step("Stress sequence 6", 67, self.stress_burst, 6)
+            run_step("Stress sequence 7", 77, self.stress_burst, 7)
+            run_step("Stress sequence 8", 87, self.stress_burst, 8)
+            
+            gui.set_status("Performance test completed", 100)
+            time.sleep(1)
+            self.poweroff()
+        finally:
+            gui.close()
     
     """ Tests definitions """
     def single_pulse_measure (self):
@@ -414,6 +450,7 @@ class ate_init:
             gui.set_status("Setting the scope", 4); self.scope.config("")
             gui.set_status("Setting the unblanking generator", 8); self.en.config("0.125", "3.52")
             gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_gain_flatness_body)
+            
             gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
             gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
             gui.set_status("Turning on blanking signals", 9); self.en.operate()
@@ -426,6 +463,7 @@ class ate_init:
             gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_gain_flatness_head)
             gui.set_status("Setting the amplifier in head mode", 11); self.comm.head()
             gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
+
             gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
             gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
             gui.set_status("Acquiring VNA data", 10); s21_raw_head = self.vna.visa.query("CALC:MEAS2:DATA:FDATa?")
@@ -443,8 +481,8 @@ class ate_init:
             logging.info("RF input match (12007): %s:1", round(self.test_id_12007, 2)) 
             logging.info("Body gain flatness (13101): %s dB", round(self.test_id_13101, 2))
             logging.info("Head gain flatness (13102): %s dB", round(self.test_id_13102, 2))
-            logging.info("Body power (13106): %sdBm", round(self.test_id_13106, 2))
-            logging.info("Head power (13107): %sdBm", round(self.test_id_13107, 2))
+            logging.info("Body gain (13106): %s dB", round(self.test_id_13106, 2))
+            logging.info("Head gain (13107): %s dB", round(self.test_id_13107, 2))
             gui.set_status("Gain flatness measure completed", 100); time.sleep(0.5)
             gui.close()
             logging.info("Gain flatness measure completed")
@@ -454,12 +492,16 @@ class ate_init:
             gui.close()
             raise
 
-    def fidelity_measure(self):
+    def fidelity_measure_legacy(self):
+        """
+        Legacy implementation of fidelity measure.
+        Replaced by new implementation (formerly fidelity_measure_wip) on 2026-03-04.
+        """
         try:
             gui = progress_window("Fidelity measure status"); logging.info("Starting fidelity measure")
             gui.set_status("Setting the amplifier in standby", 10); self.comm.standby()
             gui.set_status("Setting the switches", 2); self.sw.config("vna_body")
-            gui.set_status("Setting the scope", 4); self.scope.config("")
+            gui.set_status("Setting the scope", 4); self.scope.config("fidelity_measure")
             gui.set_status("Setting the unblanking generator", 8); self.en.config("0.2", "4.5")
             gui.set_status("Loading VNA configuration", 6); self.vna.visa.write(ate_config.load_fidelity_forward)
             gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
@@ -507,6 +549,402 @@ class ate_init:
             gui.close()
             raise
 
+
+    def fidelity_measure(self):
+        '''
+        Fidelity measure using VNA trace -> gain/phase non-linearity (pk-pk) and differential gain/phase (worst-case value)
+        Pass/Fail can be done by directly comparing each test_id_xxxxx to the immutable [LSL, USL] in your matrix.
+
+        Assumptions:
+        - VNA sweep is a power ramp with constant step in dB (Pin_step_db).
+        - The VNA configuration (forward/reverse) defines the ramp; you must set the correct Pin_start_db and Pin_stop_db
+        for each direction below.
+        '''
+        # ---- Constants to align with your spec table ----
+        PIN_STEP_DB = 0.10
+
+        # Analysis start point to ignore noise floor (e.g. -40 to -35 dBm)
+        FIDELITY_ANALYSIS_START_DBM = -32.0
+
+        # These MUST match your VNA power ramp configuration.
+        # Set them once correctly and you can delete all magic indices forever.
+        FORWARD_PIN_START_DBM = -40.0
+        FORWARD_PIN_STOP_DBM  = 0.0
+
+        REVERSE_PIN_START_DBM = 0.0
+        REVERSE_PIN_STOP_DBM  = -40.0
+
+        # Spec (immutable) used only to compute the single representative value for differential tests.
+        SPEC = {
+            # Forward
+            13206: (-0.10,  0.10),
+            13207: (-0.20,  0.10),
+            13208: (-0.30,  0.10),
+            13210: (-0.50,  0.50),
+            13211: (-1.75,  0.50),
+            13212: (-3.00,  0.50),
+            # Reverse
+            13214: (-0.10,  0.10),
+            13215: (-0.20,  0.10),
+            13216: (-0.30,  0.10),
+            13218: (-0.50,  0.50),
+            13219: (-1.75,  0.50),
+            13220: (-3.00,  0.50),
+        }
+
+        def _safe_close_gui(gui_obj):
+            try:
+                gui_obj.close()
+            except Exception:
+                pass
+
+        def _slice_by_pin(arr, pin, p0, p1):
+            mask = (pin >= p0) & (pin <= p1)
+            if not numpy.any(mask):
+                return numpy.array([])
+            return arr[mask]
+
+        def _smooth_5pt(arr):
+            arr = numpy.asarray(arr, dtype=float)
+            if arr.size < 5:
+                return arr.copy()
+            kernel = numpy.ones(5, dtype=float) / 5.0
+            padded = numpy.pad(arr, (2, 2), mode="edge")
+            return numpy.convolve(padded, kernel, mode="valid")
+
+        def _pk_pk_normalized(arr, pin, pin_ref_dbm, pin_min_dbm, pin_max_dbm):
+            # Normalize to reference Pin
+            # Find index closest to pin_ref_dbm
+            idx_ref = (numpy.abs(pin - pin_ref_dbm)).argmin()
+            if 0 <= idx_ref < len(arr):
+                val_ref = arr[idx_ref]
+                arr_norm = arr - val_ref
+            else:
+                arr_norm = arr
+
+            # Compute pk-pk in range
+            seg = _slice_by_pin(arr_norm, pin, pin_min_dbm, pin_max_dbm)
+            if seg.size == 0:
+                return 0.0
+            return float(numpy.max(seg) - numpy.min(seg))
+
+        def _worst_value_for_interval(arr, min_spec, max_spec):
+            if arr.size == 0:
+                return 0.0
+            v_min = float(numpy.min(arr))
+            v_max = float(numpy.max(arr))
+            
+            # If specs are None, handle gracefully
+            if min_spec is None: min_spec = -float('inf')
+            if max_spec is None: max_spec = float('inf')
+
+            # Check failures
+            fail_min = v_min < min_spec
+            fail_max = v_max > max_spec
+            
+            if fail_min and fail_max:
+                # Both fail, return the one that fails more (larger deviation from limit)
+                if (min_spec - v_min) > (v_max - max_spec):
+                    return v_min
+                else:
+                    return v_max
+            elif fail_min:
+                return v_min
+            elif fail_max:
+                return v_max
+            
+            # Both pass, return the one closest to limit (smallest margin)
+            margin_min = v_min - min_spec
+            margin_max = max_spec - v_max
+            
+            if margin_min < margin_max:
+                return v_min
+            else:
+                return v_max
+
+        def _plot_debug_chart(pin_arr, gain_raw_arr, gain_smooth_arr, phase_raw_arr, phase_smooth_arr, gain_diff_arr, phase_diff_arr, pin_start_dbm, pin_stop_dbm, direction_label=""):
+            try:
+                import matplotlib.pyplot as plt
+
+                fig, axs = plt.subplots(2, 2, figsize=(14, 9))
+                
+                title_suffix = f"({direction_label})" if direction_label else ""
+
+
+                # Plot 1: Gain vs Pin (raw vs smoothed)
+                axs[0, 0].plot(pin_arr, gain_raw_arr, label="Gain raw", alpha=0.6)
+                axs[0, 0].plot(pin_arr, gain_smooth_arr, label="Gain smooth", linewidth=2)
+                axs[0, 0].set_title("Gain vs Pin")
+                axs[0, 0].set_xlabel("Pin (dBm)")
+                axs[0, 0].set_ylabel("Gain (dB)")
+                axs[0, 0].grid(True, alpha=0.3)
+                axs[0, 0].legend()
+
+                # Plot 2: Phase vs Pin (raw vs smoothed)
+                axs[0, 1].plot(pin_arr, phase_raw_arr, label="Phase raw", alpha=0.6)
+                axs[0, 1].plot(pin_arr, phase_smooth_arr, label="Phase smooth", linewidth=2)
+                axs[0, 1].set_title("Phase vs Pin")
+                axs[0, 1].set_xlabel("Pin (dBm)")
+                axs[0, 1].set_ylabel("Phase (deg)")
+                axs[0, 1].grid(True, alpha=0.3)
+                axs[0, 1].legend()
+
+                # Plot 3: Gain Diff vs Pin + segmented spec limits
+                axs[1, 0].plot(pin_arr, gain_diff_arr, label="dGain/dPin", color="tab:blue")
+                gain_segments = [
+                    (-40.0, -3.0, *SPEC.get(13206, (-0.10, 0.10))),
+                    (-3.0, -1.0, *SPEC.get(13207, (-0.20, 0.10))),
+                    (-1.0, 0.0, *SPEC.get(13208, (-0.30, 0.10))),
+                ]
+                for p0, p1, lsl, usl in gain_segments:
+                    axs[1, 0].plot([p0, p1], [lsl, lsl], "r--", linewidth=1)
+                    axs[1, 0].plot([p0, p1], [usl, usl], "r--", linewidth=1)
+                axs[1, 0].set_title("Gain Diff vs Pin")
+                axs[1, 0].set_xlabel("Pin (dBm)")
+                axs[1, 0].set_ylabel("dGain/dPin (dB/dB)")
+                axs[1, 0].grid(True, alpha=0.3)
+                axs[1, 0].legend()
+
+                # Plot 4: Phase Diff vs Pin + segmented spec limits
+                axs[1, 1].plot(pin_arr, phase_diff_arr, label="dPhase/dPin", color="tab:green")
+                phase_segments = [
+                    (-40.0, -3.0, *SPEC.get(13210, (-0.50, 0.50))),
+                    (-3.0, -1.0, *SPEC.get(13211, (-1.75, 0.50))),
+                    (-1.0, 0.0, *SPEC.get(13212, (-3.00, 0.50))),
+                ]
+                for p0, p1, lsl, usl in phase_segments:
+                    axs[1, 1].plot([p0, p1], [lsl, lsl], "r--", linewidth=1)
+                    axs[1, 1].plot([p0, p1], [usl, usl], "r--", linewidth=1)
+                axs[1, 1].set_title("Phase Diff vs Pin")
+                axs[1, 1].set_xlabel("Pin (dBm)")
+                axs[1, 1].set_ylabel("dPhase/dPin (deg/dB)")
+                axs[1, 1].grid(True, alpha=0.3)
+                axs[1, 1].legend()
+
+                fig.suptitle(f"Fidelity Debug {title_suffix} (Pin {pin_start_dbm:.1f} to {pin_stop_dbm:.1f} dBm)", fontsize=12)
+                fig.tight_layout(rect=[0, 0.02, 1, 0.98])
+
+                # Ensure filename is unique and informative
+                dir_label = direction_label.lower().replace(" ", "_") if direction_label else "unknown"
+                timestamp = f"{time.strftime('%Y%m%d_%H%M%S')}_{int((time.time() % 1) * 1000):03d}"
+                filename = f"fidelity_debug_{dir_label}_{timestamp}.png"
+
+                # Save to TestResults directory
+                try:
+                    test_results_dir = os.path.join(os.getcwd(), "TestResults")
+                    if not os.path.exists(test_results_dir):
+                        os.makedirs(test_results_dir)
+                    
+                    full_path = os.path.join(test_results_dir, filename)
+                    fig.savefig(full_path, dpi=150)
+                    logging.info("Fidelity debug plot saved: %s", full_path)
+                except Exception as e:
+                    logging.error("Failed to save plot to TestResults: %s", e)
+                    # Fallback to current directory
+                    fig.savefig(filename, dpi=150)
+                    logging.info("Fidelity debug plot saved to CWD: %s", filename)
+
+                plt.close(fig)
+            except Exception:
+                # Keep measurement flow safe even if matplotlib is missing or plotting fails
+                pass
+
+        def _compute_metrics_from_s21(s21_raw: str, pin_start_dbm: float, pin_stop_dbm: float, direction_label: str = ""):
+            """
+            Parse VNA S21 trace and compute:
+            - gain_dB
+            - phase_deg (UNWRAPPED)
+            - d(gain)/dPin, d(phase)/dPin
+            - Pin axis
+            """
+            z = self.vna.parse_data(s21_raw)  # complex array
+            z = numpy.asarray(z)
+
+            gain_db_raw = 20.0 * numpy.log10(numpy.abs(z))
+            phase_deg_raw = numpy.degrees(numpy.unwrap(numpy.angle(z)))  # critical for stable differential phase
+
+            # 5-point moving average smoothing to reduce derivative noise
+            gain_db = _smooth_5pt(gain_db_raw)
+            phase_deg = _smooth_5pt(phase_deg_raw)
+
+            n = len(gain_db)
+
+            # Calculate actual step size from data to ensure consistency
+            if n > 1:
+                step_db = (pin_stop_dbm - pin_start_dbm) / (n - 1)
+            else:
+                step_db = PIN_STEP_DB
+
+            # Warn if step size differs significantly from expected constant
+            if abs(abs(step_db) - PIN_STEP_DB) > 0.01:
+                logging.warning(
+                    "VNA Pin step mismatch: calculated %.4f dB (N=%d, Range=[%.1f, %.1f]) != expected %.4f dB. "
+                    "Using calculated step for analysis.",
+                    step_db, n, pin_start_dbm, pin_stop_dbm, PIN_STEP_DB
+                )
+
+            pin = pin_start_dbm + step_db * numpy.arange(n, dtype=float)
+
+            gain_diff = numpy.gradient(gain_db, step_db)     # dB/dB
+            phase_diff = numpy.gradient(phase_deg, step_db)  # deg/dB
+
+            _plot_debug_chart(pin, gain_db_raw, gain_db, phase_deg_raw, phase_deg, gain_diff, phase_diff, pin_start_dbm, pin_stop_dbm, direction_label)
+            return gain_db, gain_diff, phase_deg, phase_diff, pin
+
+        def _compute_forward_tests(gain_db, gain_diff, phase_deg, phase_diff, pin):
+            # Abs gain non-linearity (pk-pk normalized, analysis start to 0 dBm)
+            self.test_id_13205 = _pk_pk_normalized(
+                gain_db,
+                pin,
+                pin_ref_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_min_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_max_dbm=0.0,
+            )
+
+
+            # Differential gain representative values (single scalar comparable to spec)
+            self.test_id_13206 = _worst_value_for_interval(
+                _slice_by_pin(gain_diff, pin, FIDELITY_ANALYSIS_START_DBM, -3.0), *SPEC[13206]
+            )
+            self.test_id_13207 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin, -3.0, -1.0), *SPEC[13207])
+            self.test_id_13208 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin, -1.0, 0.0), *SPEC[13208])
+
+            # Abs phase non-linearity (pk-pk normalized, analysis start to 0 dBm)
+            self.test_id_13209 = _pk_pk_normalized(
+                phase_deg,
+                pin,
+                pin_ref_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_min_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_max_dbm=0.0,
+            )
+
+            # Differential phase representative values
+            self.test_id_13210 = _worst_value_for_interval(
+                _slice_by_pin(phase_diff, pin, FIDELITY_ANALYSIS_START_DBM, -3.0), *SPEC[13210]
+            )
+            self.test_id_13211 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin, -3.0, -1.0), *SPEC[13211])
+            self.test_id_13212 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin, -1.0, 0.0), *SPEC[13212])
+
+        def _compute_reverse_tests(gain_db, gain_diff, phase_deg, phase_diff, pin):
+            self.test_id_13213 = _pk_pk_normalized(
+                gain_db,
+                pin,
+                pin_ref_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_min_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_max_dbm=0.0,
+            )
+            self.test_id_13214 = _worst_value_for_interval(
+                _slice_by_pin(gain_diff, pin, FIDELITY_ANALYSIS_START_DBM, -3.0), *SPEC[13214]
+            )
+            self.test_id_13215 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin, -3.0, -1.0), *SPEC[13215])
+            self.test_id_13216 = _worst_value_for_interval(_slice_by_pin(gain_diff, pin, -1.0, 0.0), *SPEC[13216])
+
+            self.test_id_13217 = _pk_pk_normalized(
+                phase_deg,
+                pin,
+                pin_ref_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_min_dbm=FIDELITY_ANALYSIS_START_DBM,
+                pin_max_dbm=0.0,
+            )
+
+            self.test_id_13218 = _worst_value_for_interval(
+                _slice_by_pin(phase_diff, pin, FIDELITY_ANALYSIS_START_DBM, -3.0), *SPEC[13218]
+            )
+            self.test_id_13219 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin, -3.0, -1.0), *SPEC[13219])
+            self.test_id_13220 = _worst_value_for_interval(_slice_by_pin(phase_diff, pin, -1.0, 0.0), *SPEC[13220])
+
+        def _log_segment_minmax(tag: str, arr: numpy.ndarray, pin: numpy.ndarray, p0: float, p1: float):
+            mask = (pin >= p0) & (pin <= p1)
+            if not numpy.any(mask):
+                logging.info("%s: empty segment Pin[%.2f..%.2f]", tag, p0, p1)
+                return
+
+            seg = numpy.asarray(arr, dtype=float)[mask]
+            pin_seg = numpy.asarray(pin, dtype=float)[mask]
+
+            mn = float(numpy.min(seg)); mx = float(numpy.max(seg))
+            i_mn = int(numpy.argmin(seg)); i_mx = int(numpy.argmax(seg))
+
+            logging.info(
+                "%s Pin[%.2f..%.2f]: min=%.4f at Pin=%.2f, max=%.4f at Pin=%.2f",
+                tag, p0, p1, mn, float(pin_seg[i_mn]), mx, float(pin_seg[i_mx])
+            )
+
+        gui = None
+        try:
+            gui = progress_window("Fidelity measure status")
+            logging.info("Starting fidelity measure")
+
+            # ---------- Forward ramp ----------
+            gui.set_status("Setting the amplifier in standby", 10); self.comm.standby()
+            gui.set_status("Setting the switches", 2); self.sw.config("vna_body")
+            gui.set_status("Setting the scope", 4); self.scope.config("fidelity_measure")
+            gui.set_status("Setting the unblanking generator", 8); self.en.config("0.2", "4.5")
+
+            gui.set_status("Loading VNA configuration (forward)", 6); self.vna.visa.write(ate_config.load_fidelity_forward)
+            gui.set_status("Setting the amplifier in body mode", 11); self.comm.body()
+            gui.set_status("Setting the amplifier in operate", 10); self.comm.operate()
+            gui.set_status("Turning on blanking signals", 9); self.en.operate()
+
+            gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
+            gui.set_status("Acquiring VNA data (forward)", 10)
+            s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
+
+            (self.forward_s21_mag,
+            self.forward_s21_mag_diff,
+            self.forward_s21_phase,
+            self.forward_s21_phase_diff,
+            forward_pin) = _compute_metrics_from_s21(
+                s21_raw, FORWARD_PIN_START_DBM, FORWARD_PIN_STOP_DBM, "Forward"
+            )
+
+            _compute_forward_tests(self.forward_s21_mag,
+                                self.forward_s21_mag_diff,
+                                self.forward_s21_phase,
+                                self.forward_s21_phase_diff,
+                                forward_pin)
+
+            # ---------- Reverse ramp ----------
+            gui.set_status("Loading VNA configuration (reverse)", 6); self.vna.visa.write(ate_config.load_fidelity_reverse)
+            gui.set_status("Waiting for VNA to acquire data... (please wait 1 minute)", 10); self.vna_single()
+
+            gui.set_status("Acquiring VNA data (reverse)", 10)
+            s21_raw = self.vna.visa.query("CALC:MEAS1:DATA:FDATa?")
+
+            (self.reverse_s21_mag,
+            self.reverse_s21_mag_diff,
+            self.reverse_s21_phase,
+            self.reverse_s21_phase_diff,
+            reverse_pin) = _compute_metrics_from_s21(
+                s21_raw, REVERSE_PIN_START_DBM, REVERSE_PIN_STOP_DBM, "Reverse"
+            )
+
+            _compute_reverse_tests(self.reverse_s21_mag,
+                                self.reverse_s21_mag_diff,
+                                self.reverse_s21_phase,
+                                self.reverse_s21_phase_diff,
+                                reverse_pin)
+
+            # Bring system back to safe state after acquisition
+            gui.set_status("Setting the amplifier back to standby", 14); self.comm.standby()
+            gui.set_status("Turning off the unblanking generator", 18); self.en.poweroff()
+
+            _safe_close_gui(gui)
+            logging.info("Fidelity measure completed")
+
+        except Exception:
+            if gui is not None:
+                try:
+                    gui.set_status("Error occured during fidelity measure, turning off the ATE", 0)
+                except Exception:
+                    pass
+            logging.warning("Error while performing fidelity measure")
+            try:
+                self.emergency_stop()
+            finally:
+                if gui is not None:
+                    _safe_close_gui(gui)
+            raise
     def stress(self, sequence):
         try:
             gui = progress_window(f"Stress sequence {sequence}"); logging.info("Starting stress sequence %s measure", sequence)
@@ -740,6 +1178,8 @@ class ate_init:
                     self.visa.write("CALCulate:SPECtrum1:GATE:POSition 0.01")
                     self.visa.write("CALCulate:SPECtrum1:GATE:WIDTh 0.02")
                     self.visa.write("TRIGger:MODE SINGLe")
+                if str_config == "fidelity_measure":
+                    self.visa.write("TRIGger:MODE SINGLe")
                 if str_config == "input_tuning":
                     self.visa.write("TRIGger:EVENt1:SOURce C3")
                     self.visa.write("TRIGger:EVENt1:TYPE EDGE")
@@ -793,7 +1233,7 @@ class ate_init:
                 self.idn = "unknown VNA"
                 rm = pyvisa.ResourceManager()
                 self.visa = rm.open_resource(ate_config.vna_address)
-                self.visa.timeout = 5000
+                self.visa.timeout = 20000
                 self.idn = self.visa.query("*IDN?").replace('\n', '')
                 logging.info("Network analyzer found: %s", self.idn)
             except Exception:

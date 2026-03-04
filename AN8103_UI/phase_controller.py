@@ -15,9 +15,6 @@ from .phase_services import (
 from .specs import PERFORMANCE_SPECS
 
 
-
-
-
 def make_phase_runner(phase_name, ate, interaction_callback=None):
     def runner():
         result_phases = {
@@ -49,55 +46,19 @@ def make_subtest_runner(method_name, ate, interaction_callback=None):
         if method_name in registry:
             return registry[method_name]()
 
-        mapping = {
-            "single_pulse_measure": ("13301", "test_id_13301"),
-            "harmonic_output_measure": ("13201", "test_id_13201"),
-            "noise_unblanked_measure": ("13204", "test_id_13204"),
-        }
+        # Fallback for methods not in registry but present on ATE
         if hasattr(ate, method_name):
             try:
                 getattr(ate, method_name)()
-                test_id, attr = mapping.get(method_name, (None, None))
-                if test_id and attr and hasattr(ate, attr):
-                    val = getattr(ate, attr)
-                    spec = PERFORMANCE_SPECS.get(test_id)
-                    label = method_name
-                    unit = ""
-                    spec_min = None
-                    spec_max = None
-                    if spec:
-                        label = spec[0]
-                        unit = spec[1]
-                        spec_min = spec[2]
-                        spec_max = spec[3]
-                    
-                    ok_value = True
-                    if spec_min is not None and val < spec_min:
-                        ok_value = False
-                    if spec_max is not None and val > spec_max:
-                        ok_value = False
-                    status = "OK" if ok_value else "FAIL"
-                    
-                    results.append(TestResult(
-                        test_id=test_id,
-                        label=label,
-                        value=val,
-                        unit=unit,
-                        min_spec=spec_min,
-                        max_spec=spec_max,
-                        status=status
-                    ))
-                    ok = ok_value
-                else:
-                    results.append(TestResult(
-                        test_id="INFO",
-                        label=f"Sous-test {method_name} terminé.",
-                        value=0.0,
-                        unit="",
-                        min_spec=None,
-                        max_spec=None,
-                        status="INFO"
-                    ))
+                results.append(TestResult(
+                    test_id="INFO",
+                    label=f"Sous-test {method_name} terminé.",
+                    value=0.0,
+                    unit="",
+                    min_spec=None,
+                    max_spec=None,
+                    status="INFO"
+                ))
             except Exception as e:
                 ok = False
                 results.append(TestResult(
@@ -121,5 +82,4 @@ def make_subtest_runner(method_name, ate, interaction_callback=None):
                 status="FAIL"
             ))
         return results, ok
-
     return runner

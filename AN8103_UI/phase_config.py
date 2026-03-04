@@ -79,11 +79,18 @@ PHASE_CONFIG = {
         "image": "Models/Pics/Output_Conditional_Tuning_Connection.png",
         "instruction": (
             "Préparer le réglage de la sortie conditionnelle (Output Conditional Tuning).\n"
-            "Assurez-vous que la configuration est correcte."
+            "Assurez-vous que la configuration est correcte.\n"
+            "Connecter les 8 sondes de l'oscilloscope."
         ),
         "require_check": True,
         "check_text": "Vérifier que vous travaillez sur ATE 02. Vérifier que les câbles de sont connectés correctement.",
         "caption": "",
+        "enable_subtests_on_run": True,
+        "subtests": [
+            {"method": "run_step2_oscilloscope_tests", "label": "Mesures Oscilloscope (8 ch)"},
+            {"method": "run_step2_resistance_head", "label": "Résistance Head"},
+            {"method": "run_step2_resistance_body", "label": "Résistance Body"},
+        ],
     },
     "Input conditional board tuning": {
         "display_name": "Réglage du module d'entrée",
@@ -137,6 +144,17 @@ PHASE_CONFIG = {
             {"method": "single_pulse_measure", "label": "Mesure single pulse"},
             {"method": "harmonic_output_measure", "label": "Mesure harmonique"},
             {"method": "noise_unblanked_measure", "label": "Mesure bruit blanké"},
+            {"method": "interpulse_stability_measure", "label": "Mesure stabilité inter-pulse"},
+            {"method": "gain_flatness_measure", "label": "Mesure gain flatness"},
+            {"method": "fidelity_measure", "label": "Mesure fidélité"},
+            {"method": "run_stress_1", "label": "Stress 1"},
+            {"method": "run_stress_2", "label": "Stress 2"},
+            {"method": "run_stress_3", "label": "Stress 3"},
+            {"method": "run_stress_4", "label": "Stress 4"},
+            {"method": "run_stress_5", "label": "Stress 5"},
+            {"method": "run_stress_6", "label": "Stress Burst 6"},
+            {"method": "run_stress_7", "label": "Stress Burst 7"},
+            {"method": "run_stress_8", "label": "Stress Burst 8"},
         ],
     },
     "Factory gain reset": {
@@ -144,12 +162,20 @@ PHASE_CONFIG = {
         "ate_config": "CONF_PERF",
         "image": "Models/Pics/ATE_configuration3.png",
         "instruction": (
-            "Appliquer le réglage d'usine de l'amplificateur.\n"
-            "Cette étape prépare l'unité pour la mesure de bruit."
+            "Réaliser le réglage Step 6 en trois sous-étapes.\n"
+            "Étape 1: pré-réglage BODY, puis réglages finaux BODY et HEAD."
         ),
         "require_check": True,
-        "check_text": "Vérifier que les câbles de puissance sont connectés aux sorties BODY et HEAD.",
+        "check_text": "Vérifier que le wattmètre est connecté et que les sorties BODY/HEAD sont correctement câblées.",
         "caption": "",
+        "enable_subtests_on_run": True,
+        "locked_subtests": ["Réglage final BODY", "Réglage final HEAD"],
+        "unlock_when_subtests_done": ["Pré-réglage BODY"],
+        "subtests": [
+            {"method": "run_factory_gain_pre_body", "label": "Pré-réglage BODY"},
+            {"method": "run_factory_gain_body_final", "label": "Réglage final BODY"},
+            {"method": "run_factory_gain_head_final", "label": "Réglage final HEAD"}
+        ],
     },
     "Noise blanked": {
         "display_name": "Mesure de bruit blanké",
