@@ -4,7 +4,6 @@ from .phase_services import (
     run_output_conditional_simulation,
     run_power_module_gain_simulation,
     run_input_conditional_board_tuning,
-    run_performance_test,
     run_configuration_finale,
     run_noise_blanked,
     # Sub phases registry
@@ -12,7 +11,7 @@ from .phase_services import (
     # Shared
     TestResult,
 )
-from .specs import PERFORMANCE_SPECS
+from .test_steps.performance_test import run_performance_sequence
 
 
 def make_phase_runner(phase_name, ate, interaction_callback=None):
@@ -20,7 +19,7 @@ def make_phase_runner(phase_name, ate, interaction_callback=None):
         result_phases = {
             "Power module gain tuning": lambda: run_power_module_gain_simulation(ate),
             "Input conditional board tuning": lambda: run_input_conditional_board_tuning(ate, interaction_callback),
-            "Performance test / burn": lambda: run_performance_test(ate),
+            "Performance test / burn": lambda: run_performance_sequence(ate, interaction_callback),
         }
         line_phases = {
             "Diagnostic": lambda: run_diagnostic(ate),

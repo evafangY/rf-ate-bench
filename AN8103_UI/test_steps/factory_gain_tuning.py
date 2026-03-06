@@ -78,23 +78,51 @@ def _run_gain_stage(ate, interaction_callback, stage_id, title, instruction, mod
         return measured, stable_count >= required_count, False, stable_count
 
     while True:
-        # Always try to refresh measurement from ATE if available
+        # ATE measurement
+        ate_val = None
         if allow_auto_measure:
-            auto_val = _gain_ate_measure(ate, mode)
-            if auto_val is not None:
-                measured = auto_val
+            ate_val = _gain_ate_measure(ate, mode)
 
-        is_ok = _gain_in_spec(measured, target_dbm, tol)
-        status = "OK" if is_ok else "HORS SPEC"
+        # If manual measure is NOT allowed (e.g. HEAD), we treat the ATE value as the primary measurement
+        if not allow_manual_measure and ate_val is not None:
+            measured = ate_val
+
+        # Initial validation logic (pre-interaction)
+        ate_ok = _gain_in_spec(ate_val, target_dbm, tol) if ate_val is not None else False
         
+        if allow_manual_measure:
+            # Note: 'measured' here refers to the manually entered value
+            manual_ok = _gain_in_spec(measured, target_dbm, tol) if measured is not None else False
+            
+            # Dual validation requirement: Both Manual and ATE must be in spec
+            both_ok = manual_ok and ate_ok
+            
+            status = "OK" if both_ok else "HORS SPEC"
+            if not manual_ok and not ate_ok:
+                 status = "MANUAL & ATE FAIL"
+            elif not manual_ok:
+                 status = "MANUAL FAIL"
+            elif not ate_ok:
+                 status = "ATE FAIL"
+        else:
+            # For HEAD (or other auto-only steps), only ATE validation is required
+            both_ok = ate_ok
+            status = "OK" if both_ok else "ATE FAIL"
+
+        # Update instruction to show ATE value if available for visual comparison
+        current_instruction = instruction
+        if ate_val is not None:
+             current_instruction += f"\nATE Measurement: {ate_val:.2f} dBm"
+
         response = interaction_callback({
             "type": "step6_gain_adjust",
             "stage": stage_id,
             "title": title,
-            "instruction": instruction,
+            "instruction": current_instruction,
             "target_dbm": target_dbm,
             "tolerance_db": tol,
-            "measured_dbm": measured,
+            "measured_dbm": measured,  # This is the manual value (or ATE value if manual disabled)
+            "ate_measured_dbm": ate_val, # Pass ATE value for UI display
             "status": status,
             "stable_count": stable_count,
             "required_count": required_count,
@@ -102,39 +130,47 @@ def _run_gain_stage(ate, interaction_callback, stage_id, title, instruction, mod
             "allow_manual_measure": allow_manual_measure,
         })
         
-        action, measured = _gain_normalize_response(response, measured)
+        action, new_manual_val = _gain_normalize_response(response, measured)
         
         if action == "abort":
             return measured, False, True, stable_count
             
-        # Re-check spec with potentially new manual measurement
-        is_ok = _gain_in_spec(measured, target_dbm, tol)
+        # Update manual measurement if changed
+        if new_manual_val is not None:
+            measured = new_manual_val
+
+        # Re-evaluate conditions after user input
+        manual_ok = _gain_in_spec(measured, target_dbm, tol)
+        # We need to re-read ATE? ideally yes, but for now use the one from top of loop or let next loop handle it
+        # If user clicked "measure", we loop back and re-read ATE.
         
         if action in ("measure", "auto_measure"):
-            # Update stable count based on current measurement
-            stable_count = stable_count + 1 if is_ok else 0
+            # We loop back, which will trigger new ATE read
+            # Reset stable count? Or increment? 
+            # The original logic incremented stable_count if "is_ok".
+            # Here "is_ok" implies both are good.
+            # But we are at end of loop, we haven't re-read ATE yet for the "next" state.
+            # actually, 'ate_val' is fresh from this loop iteration.
+            
+            if both_ok:
+                stable_count += 1
+            else:
+                stable_count = 0
             continue
             
         if action == "continue":
-            if is_ok and stable_count >= required_count:
+            # Only allow continue if both are valid
+            if both_ok and stable_count >= required_count:
                 return measured, True, False, stable_count
-            # If user clicked continue but conditions not met, we might want to warn or just loop.
-            # For now, let's assume if they click continue and it's good, we exit. 
-            # If not good, maybe we should let them force pass? 
-            # The original logic implied strict check on continue.
-            # But if required_count is 1, stable_count should be at least 1 if is_ok is true.
-            if is_ok:
-                # If we are here, it means stable_count < required_count but is_ok is True.
-                # This can happen if required_count > 1 and we haven't hit it yet.
-                # If required_count is 1, stable_count should have been incremented in previous loop?
-                # Actually, stable_count is only incremented on "measure" action.
-                # If user opens dialog, sees good value, and clicks "Continue" immediately:
-                # We should probably treat that as a valid confirmation if it's in spec.
-                return measured, True, False, max(stable_count, 1)
-            else:
-                # User clicked continue but value is bad. 
-                # Strict mode: reject.
-                pass
+            
+            # If conditions met but user just clicked continue without a specific "measure" click sequence
+            # (e.g. required_count=1), we accept if currently valid
+            if required_count <= 1 and both_ok:
+                 return measured, True, False, 1
+                 
+            # Otherwise, ignore continue or warn? 
+            # The loop continues, effectively ignoring the click until conditions met
+            pass
 
 
 def _run_gain_subtest(ate, interaction_callback, *, step_id, stage_id, title, label, mode, input_dbm, target_dbm, tol=0.2, required_count=1, allow_manual_measure=True):

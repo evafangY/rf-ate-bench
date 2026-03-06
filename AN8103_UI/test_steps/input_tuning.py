@@ -1,6 +1,5 @@
 import math
-from ..test_utils import create_test_result
-from .test_result import TestResult
+from .test_result import TestResult, create_test_result
 
 def _run_single_input_tuning_step(ate, interaction_callback, mode, input_dbm, _target, tol, label, step_index):
     results = []

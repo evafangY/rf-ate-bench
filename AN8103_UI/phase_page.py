@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
 from ATE_Lib_AN8103.ate_lib import COMM_Error, ATE_Instrument_Error
-from .phase_views import render_results_table
+from .test_steps.test_result import render_results_table
 from .test_steps.test_result import TestResult
 
 
@@ -30,6 +30,7 @@ class PhasePage(QWidget):
         locked_subtests=None,
         unlock_when_subtests_done=None,
         status_callback=None,
+        execute_all_subtests=False,
     ):
         super().__init__()
         self.phase_name = phase_name
@@ -40,6 +41,7 @@ class PhasePage(QWidget):
         self.checked = not require_check
         self.subtests = subtests or []
         self.enable_subtests_on_run = enable_subtests_on_run
+        self.execute_all_subtests = execute_all_subtests
         self.locked_subtests = set(locked_subtests or [])
         self.unlock_when_subtests_done = set(unlock_when_subtests_done or [])
         self.subtest_buttons = []
@@ -213,9 +215,14 @@ class PhasePage(QWidget):
             if btn:
                 btn.setEnabled(deps_met)
 
-    def set_status(self, ok: bool, enable_next: bool = True):
+    def set_status(self, ok: bool, enable_next: bool = True, results=None):
         if self.status_callback:
-            self.status_callback(ok)
+            try:
+                # Try calling with results argument
+                self.status_callback(ok, results=results)
+            except TypeError:
+                # Fallback for callbacks that don't accept results
+                self.status_callback(ok)
         if ok:
             if enable_next:
                 self.next_button.setEnabled(True)
@@ -261,14 +268,23 @@ class PhasePage(QWidget):
 
     def on_run(self):
         if self.enable_subtests_on_run and self.subtests:
-            self.result_display.clear()
-            self.subtest_results = {}
-            self.subtests_unlocked = True
-            self.status_label.setText("Statut du test : Non testé")
-            self.status_label.setStyleSheet("")
-            self.enable_subtests(True)
-            if "Non testé" in self.status_label.text():
-                self.status_label.setText("Veuillez exécuter les sous-tests")
+            if self.execute_all_subtests:
+                # If configured to run all subtests at once
+                self.result_display.clear()
+                self.subtest_results = {}
+                self.subtests_unlocked = True
+                self.enable_subtests(True)
+                self.handle_run(self.run_callback, True)
+            else:
+                # Standard behavior: unlock and prompt
+                self.result_display.clear()
+                self.subtest_results = {}
+                self.subtests_unlocked = True
+                self.status_label.setText("Statut du test : Non testé")
+                self.status_label.setStyleSheet("")
+                self.enable_subtests(True)
+                if "Non testé" in self.status_label.text():
+                    self.status_label.setText("Veuillez exécuter les sous-tests")
         else:
             self.handle_run(self.run_callback, True)
 
@@ -295,7 +311,6 @@ class PhasePage(QWidget):
                 combined = self.collect_subtest_results()
                 if self.all_subtests_ran():
                     if self.all_subtests_passed():
-                        self.set_status(True)
                         combined.append(
                             TestResult(
                                 test_id="FINAL",
@@ -307,8 +322,8 @@ class PhasePage(QWidget):
                                 status="PASS",
                             )
                         )
+                        self.set_status(True, results=combined)
                     else:
-                        self.set_status(False)
                         combined.append(
                             TestResult(
                                 test_id="FINAL",
@@ -320,6 +335,7 @@ class PhasePage(QWidget):
                                 status="FAIL",
                             )
                         )
+                        self.set_status(False, results=combined)
                 results = combined
             if results:
                 if isinstance(results[0], TestResult):
@@ -368,7 +384,7 @@ class PhasePage(QWidget):
                         else:
                             self.result_display.setText(joined)
             if update_status:
-                self.set_status(ok)
+                self.set_status(ok, results=results)
                 self.enable_subtests(True)
         except COMM_Error as e:
             QMessageBox.warning(self, "Amplificateur error", f"Error {hex(e.code)}")

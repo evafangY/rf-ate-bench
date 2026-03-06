@@ -97,6 +97,27 @@ class FakeATE:
         self.master.error = 64
         self.master.biasQ32 = 0
         
+    def noise_blanked_measure(self):
+        """Simulate noise blanked measurement."""
+        # Spec 13202: Coherent noise (narrow spectrum) < -143.00 dBm/Hz
+        # Spec 13203: Random noise (broad spectrum) < -160.00 dBm/Hz
+        import time
+        import random
+        
+        # Simulate measurement delay
+        time.sleep(1.0)
+        
+        # Generate passing values with some variation
+        # Coherent noise: Target -150 +/- 2
+        self.test_id_13202 = -150.0 + random.uniform(-2.0, 2.0)
+        
+        # Random noise: Target -165 +/- 2
+        self.test_id_13203 = -165.0 + random.uniform(-2.0, 2.0)
+        
+        print(f"[SIM] Noise Blanked Measure:")
+        print(f"  - 13202 (Coherent): {self.test_id_13202:.2f} dBm/Hz")
+        print(f"  - 13203 (Random):   {self.test_id_13203:.2f} dBm/Hz")
+
 
     def input_tuning(self, mode, dbm):
         target = 0
