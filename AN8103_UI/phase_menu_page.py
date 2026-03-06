@@ -11,9 +11,11 @@ from .phase_config import PHASE_CONFIG
 
 
 class PhaseMenuPage(QWidget):
-    def __init__(self, phases, start_callback, eng_mode_callback, select_phase_callback):
+    def __init__(self, phases, start_callback, eng_mode_callback, select_phase_callback, generate_pdf_callback, generate_csv_callback):
         super().__init__()
         self.select_phase_callback = select_phase_callback
+        self.generate_pdf_callback = generate_pdf_callback
+        self.generate_csv_callback = generate_csv_callback
         self.phase_buttons = []
         self.status_labels = []
 
@@ -68,6 +70,16 @@ class PhaseMenuPage(QWidget):
         eng_button.setFont(QFont("Arial", 14, QFont.Bold))
         eng_button.clicked.connect(eng_mode_callback)
         button_row.addWidget(eng_button)
+
+        pdf_button = QPushButton("Générer PDF")
+        pdf_button.setFont(QFont("Arial", 14, QFont.Bold))
+        pdf_button.clicked.connect(generate_pdf_callback)
+        button_row.addWidget(pdf_button)
+
+        csv_button = QPushButton("Générer CSV")
+        csv_button.setFont(QFont("Arial", 14, QFont.Bold))
+        csv_button.clicked.connect(generate_csv_callback)
+        button_row.addWidget(csv_button)
 
         layout.addLayout(button_row)
         self.setLayout(layout)

@@ -1,4 +1,4 @@
-from AN8103_UI.specs import DIAGNOSTIC_SPECS, DIAGNOSTIC_EXCLUDED_BIASES, ZERO_TARGET_BIAS_TOLERANCE
+from AN8103_UI.specs import DIAGNOSTIC_SPECS, DIAGNOSTIC_EXCLUDED_BIASES
 from AN8103_UI.error_codes import ERROR_CODES, ERROR_HINTS
 
 def run_diagnostic(ate):
@@ -98,9 +98,8 @@ def run_diagnostic(ate):
                 biases[name] = val
                 
                 if name in excluded:
-                    # Excluded biases should be near 0 (e.g. < 20)
-                    if val > ZERO_TARGET_BIAS_TOLERANCE:
-                        has_alarm = True
+                    # Excluded biases are completely ignored per user request
+                    pass
                 elif val < bias_min or val > bias_max:
                     has_alarm = True
         return biases, has_alarm

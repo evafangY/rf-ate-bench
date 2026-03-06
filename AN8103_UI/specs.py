@@ -65,13 +65,11 @@ DIAGNOSTIC_SPECS = {
     "bias": ("Bias nominal", "", 175, 225),
 }
 
-# Biases in this list are expected to be ~0 (inactive/unused). 
-# They are excluded from the standard 175-225 check but checked for < 20.
+# Biases in this list are completely ignored per user request (no range check).
 DIAGNOSTIC_EXCLUDED_BIASES = [
     "biasQ31", "biasQ32", "biasQ33"
 ]
 
-ZERO_TARGET_BIAS_TOLERANCE = 20
 
 # Voltage and Temperature Specs for color coding
 DIAGNOSTIC_VOLTAGE_SPECS = {

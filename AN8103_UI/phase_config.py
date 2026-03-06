@@ -10,50 +10,67 @@ PHASES = [
 
 
 ATE_CONFIGURATIONS = {
+    "CONF_BASIC": {
+        "title": "ATE 01 Configurtion Basique",
+        "image": "Models/Pics/ATE_01.png",
+        "instruction": (
+            "Utiliser la configuration ATE 01 – configuration de base.\n"
+            "Vérifier que l’alimentation triphasée est connectée et que les câbles de communication  et les câbles de sorties sont correctement raccordés comme suit :\n"
+            "- Main COMM J18 de l’amplificateur → Main COMM de l’ATE \n"
+            "- Master COMM de l’amplificateur → Master COMM de l’ATE\n"
+            "- Slave COMM de l’amplificateur → Slave COMM de l’ATE\n"
+            "- RF IN J14 de l’amplificateur → Sortie RF de l’ATE\n"
+            "- BODY RF OUT de l’amplificateur → Charge BODY de l’ATE\n"
+            "- HEAD RF OUT de l’amplificateur → Charge HEAD de l’ATE\n"
+        ),
+    },
+
     "CONF_OUTPUTCOND": {
         "title": "Montage A : Réglage du module de sortie (ATE02)",
-        "image": "Models/Pics/Master_Slave_Connection.png",
+        "image": "Models/Pics/configuration_A.png",
         "instruction": (
-            "Préparer le montage pour le réglage de la sortie conditionnelle.\n"
-            "Connecter l'alimentation et les câbles de communication pour le diagnostic."
+            "Utiliser la configuration ATE 02 – configuration pour le réglage de la sortie conditionnelle.\n"
+            "Un oscilloscope 8 voies est requis."
         ),
     },
     
     "CONF_INPUTCOND": {
         "title": "Montage B : Réglage du module d'entrée",
-        "image": "Models/Pics/Input_Conditional_Tuning.png",
+        "image": "Models/Pics/configuration_B.png",
         "instruction": (
-            "Préparer le montage pour régler et vérifier la plage d'entrée.\n"
-            "Déconnecter les deux sorties du module d'entrée (Jxx et Jxx).\n"
-            "Connecter ces deux sorties à l'oscilloscope."
-
+            "Utiliser la configuration ATE 01 – configuration de base.\n"
+            "Déconnecter les câbles de sortie du module de conditionnement d’entrée et les connecter aux voies 3 et 4 de l’oscilloscope.\n"
         ),
     },
     "CONF_SW_TUNING": {
         "title": "Montage C : Réglage du gain des modules de puissance par logiciel",
-        "image": "Models/Pics/Power_module_tunning.png",
+        "image": "Models/Pics/configuration_C.png",
         "instruction": (
-            "Préparer le montage pour le réglage des modules de puissance.\n"
-            "Connecter la charge BODY à la sortie du module Master, la charge HEAD à la sortie du module Slave."
+            "Utiliser la configuration ATE 01 – configuration de base.\n"
+            "Déconnecter les câbles de sortie des modules de puissance.\n"
+            "Connecter:\n"
+            "- Sortie du module Master → Charge BODY \n"
+            "- Sortie du module Slave → Charge HEAD \n"   
         ),
     },
     "CONF_PERF": {
         "title": "Montage D : Test de performance / Burn",
-        "image": "Models/Pics/Master_Slave_Connection.png",
+        "image": "Models/Pics/configuration_D.png",
         "instruction": (
-            "Préparer le montage pour les tests.\n"
-            "Connecter la charge BODY à la sortie BODY, la charge HEAD à la sortie HEAD de l'amplificateur."
+            " Utiliser la configuration ATE 01 – configuration de base.\n"
+            "Ajouter un puissance mètre à la sortie BODY RF OUT."
         ),
     },
     "CONF_NOISE": {
         "title": "Montage E : Mesure de bruit",
-        "image": "Noise_meas/Pics/Noise.jpg",
+        "image": "Models/Pics/configuration_E.png",
         "instruction": (
-            "Préparer le montage pour la mesure de bruit.\n"
-            "La sortie de BODY est connectée directement sur le LNA.\n\n"
+            "Utiliser la configuration ATE 01 – configuration de base.\n"
+            "Déconnecter le câble de sortie BODY RF OUT et connecter le LNA ainsi que son alimentation.\n\n"
             "/!\\ ATTENTION /!\\\n"
-            "Seuls les tests de bruit peuvent être exécutés pendant cette phase."
-        ),
+            "Seul le test de bruit en mode blanked peut être réalisé dans cette configuration.\n"
+            "Tout autre test peut entraîner un risque d’endommagement du matériel."
+        ),    
     },
 }
 
@@ -61,26 +78,21 @@ ATE_CONFIGURATIONS = {
 PHASE_CONFIG = {
     "Diagnostic": {
         "display_name": "Diagnostic",
-        "ate_config": "CONF_PERF",
-        "image": "Models/Pics/Master_Slave_Connection.png",
+        "ate_config": "CONF_BASIC",
+        "image": "Models/Pics/ATE_01.png",
         "instruction": (
-            "1. Connecter l'alimentation de l'amplificateur au banc.\n"
-            "2. Connecter les câbles de communication (Main, Master, Slave).\n"
-            "3. Alimenter l'amplificateur.\n\n"
             "Le diagnostic va lire l'état et les registres d'erreur."
         ),
         "require_check": True,
-        "check_text": "Vérifier toutes les connexions (Alimentation + Communication).\nCliquer sur 'Vérifié' pour continuer.",
+        "check_text": "Vérifier que vous travaillez sur ATE 01. Configuration basique.\n Cliquer sur 'Vérifié' pour continuer.",
         "caption": "",
     },
     "Output conditional tuning": {
         "display_name": "Réglage du module de sortie",
         "ate_config": "CONF_OUTPUTCOND",
-        "image": "Models/Pics/Output_Conditional_Tuning_Connection.png",
+        "image": "Models/Pics/reglage_output.png",
         "instruction": (
-            "Préparer le réglage de la sortie conditionnelle (Output Conditional Tuning).\n"
-            "Assurez-vous que la configuration est correcte.\n"
-            "Connecter les 8 sondes de l'oscilloscope."
+            "La carte de sortie sera réglée pendant cet étape.\n"
         ),
         "require_check": True,
         "check_text": "Vérifier que vous travaillez sur ATE 02. Vérifier que les câbles de sont connectés correctement.",
@@ -95,13 +107,12 @@ PHASE_CONFIG = {
     "Input conditional board tuning": {
         "display_name": "Réglage du module d'entrée",
         "ate_config": "CONF_INPUTCOND",
-        "image": "Models/Pics/Input_Conditional_Tuning_Connection.png",
+        "image": "Models/Pics/reglage_gain.png",
         "instruction": (
-            "Préparer le réglage du module d'entrée (Input Conditional Tuning).\n"
-            "Assurez-vous que la configuration est correcte."
+            "La carte d'entrée sera réglée pendant cet étape.\n"
         ),
         "require_check": True,
-        "check_text": "Vérifier que les câbles de sortie du module d'entrée sont connectés à l'oscilloscope.",
+        "check_text": "Vérifier que vous travaillez sur ATE 01. Configuration B.\n Les sorties de la carte d'entrée doivent être connectées aux voies 3 et 4 de l'oscilloscope.",
         "caption": "",
         "enable_subtests_on_run": True,
         "locked_subtests": ["Body 0dBm", "Head 0dBm"],
@@ -118,28 +129,27 @@ PHASE_CONFIG = {
     "Power module gain tuning": {
         "display_name": "Réglage du gain du module de puissance",
         "ate_config": "CONF_SW_TUNING",
-        "image": "Models/Pics/Power_module_tunning_connection.png",
+        "image": "Models/Pics/ATE_01.png",
         "instruction": (
-            "Préparer le réglage du gain des modules de puissance.\n"
-            "Vérifier que les charges sont connectées aux sorties."
+            "Les modules de puissance seront réglées pendant cet étape.\n"
         ),
         "require_check": True,
-        "check_text": "Vérifier que les câbles de puissance sont connectés aux modules de puissance Master et Slave.",
+        "check_text": "Vérifier que vous travaillez sur ATE 01. Configuration D. \n La sortie de Master module doit être connectée à la charge BODY.\n La sortie de Slave module doit être connectée à la charge HEAD.",
         "caption": "",
     },
     
     "Performance test / burn": {
         "display_name": "Test de performance / Burn",
         "ate_config": "CONF_PERF",
-        "image": "Models/Pics/ATE_configuration3.png",
+        "image": "Models/Pics/ATE_01.png",
         "instruction": (
-            "Réaliser le test de performance RF complet.\n"
-            "Vérifier que tous les paramètres respectent les spécifications.\n"
-            "Utiliser la photo ci-dessous comme référence."
+            "Les tests de performance seront réalisés pendant cet étape.\n"
         ),
         "require_check": True,
-        "check_text": "Vérifier que les câbles de puissance sont connectés aux sorties BODY et HEAD.",
+        "check_text": "Vérifier que vous travaillez sur ATE 01. Configuration D.\n La puissance metre doit être connecté à la sortie de BODY.",
         "caption": "",
+        "enable_subtests_on_run": True,
+        "execute_all_subtests": True,
         "subtests": [
             {"method": "single_pulse_measure", "label": "Mesure single pulse"},
             {"method": "harmonic_output_measure", "label": "Mesure harmonique"},
@@ -160,13 +170,12 @@ PHASE_CONFIG = {
     "Factory gain reset": {
         "display_name": "Réglage d'usine",
         "ate_config": "CONF_PERF",
-        "image": "Models/Pics/ATE_configuration3.png",
+        "image": "Models/Pics/reglage_gain.png",
         "instruction": (
-            "Réaliser le réglage Step 6 en trois sous-étapes.\n"
-            "Étape 1: pré-réglage BODY, puis réglages finaux BODY et HEAD."
+            "Le réglage d'usine sera réalisé pendant cet étape. RF in à 3.5dBm @PEP\n"
         ),
         "require_check": True,
-        "check_text": "Vérifier que le wattmètre est connecté et que les sorties BODY/HEAD sont correctement câblées.",
+        "check_text": "Vérifier que vous travaillez sur ATE 01. Configuration D.\n La puissance metre doit être connecté à la sortie de BODY.",
         "caption": "",
         "enable_subtests_on_run": True,
         "locked_subtests": ["Réglage final BODY", "Réglage final HEAD"],
@@ -180,13 +189,12 @@ PHASE_CONFIG = {
     "Noise blanked": {
         "display_name": "Mesure de bruit blanké",
         "ate_config": "CONF_NOISE",
-        "image": "Models/Pics/Blanked_noise_connection.png",
+        "image": "Models/Pics/ATE_01.png",
         "instruction": (
-            "Mesurer le bruit blanké sur le canal BODY.\n"
-            "Suivre strictement les consignes de sécurité pour la mesure de bruit."
+            "La mesure de bruit blanké sera réalisée pendant cet étape.\n"
         ),
         "require_check": True,
-        "check_text": "Vérifier la sortie de BODY est connectée directement sur le LNA.",
+        "check_text": "Vérifier que vous travaillez sur ATE 01. Configuration E.\n La sortie de BODY doit être connectée directement sur le LNA.",
         "caption": "",
     },
 }

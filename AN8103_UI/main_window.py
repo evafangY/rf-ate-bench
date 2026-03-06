@@ -5,13 +5,27 @@ from PyQt5.QtWidgets import (
     QStackedWidget,
     QMessageBox,
     QInputDialog,
+    QFileDialog,
 )
+from PyQt5.QtGui import QTextDocument
+from PyQt5.QtPrintSupport import QPrinter
 from ATE_Lib_AN8103.ate_lib import COMM_Error, ATE_Instrument_Error
 from .data_store import SessionData, PhaseResult
 from .phase_config import PHASES, PHASE_CONFIG, ATE_CONFIGURATIONS
 from .phase_controller import make_phase_runner, make_subtest_runner
-from .phase_services import TestResult
-from .phase_views import render_diagnostic_report, render_performance_report
+from .test_steps.test_result import (
+    TestResult, 
+    render_diagnostic_report, 
+    render_performance_report
+)
+from .specs import (
+    PERFORMANCE_SPECS, 
+    OUTPUT_COND_SPECS, 
+    INPUT_COND_SPECS, 
+    NOISE_SPECS, 
+    DIAGNOSTIC_SPECS,
+    DIAGNOSTIC_VOLTAGE_SPECS
+)
 from .login_page import LoginPage
 from .setup_page import SetupPage
 from .phase_menu_page import PhaseMenuPage
@@ -25,7 +39,7 @@ class MainWindow(QWidget):
         if getattr(ate, "is_simulation", False):
             title += " [Simulation]"
         self.setWindowTitle(title)
-        self.resize(1000, 700)
+        self.resize(1280, 800)
 
         self.ate = ate
         self.session = SessionData()
@@ -45,6 +59,8 @@ class MainWindow(QWidget):
             self.start_from_beginning,
             self.open_eng_mode,
             self.select_phase,
+            self.generate_pdf_report,
+            self.generate_csv_report,
         )
         self.stack.addWidget(self.menu_page)
 
@@ -58,6 +74,7 @@ class MainWindow(QWidget):
             check_text = cfg.get("check_text", None) or None
             caption_text = cfg.get("caption", None) or None
             enable_subtests_on_run = bool(cfg.get("enable_subtests_on_run", False))
+            execute_all_subtests = bool(cfg.get("execute_all_subtests", False))
             locked_subtests = set(cfg.get("locked_subtests", []) or [])
             unlock_when_subtests_done = set(cfg.get("unlock_when_subtests_done", []) or [])
             subtest_defs = cfg.get("subtests", [])
@@ -71,8 +88,8 @@ class MainWindow(QWidget):
                 subtests.append((label, runner))
             
             def make_status_callback(idx):
-                def callback(ok):
-                    self.update_phase_status(idx, ok)
+                def callback(ok, results=None):
+                    self.update_phase_status(idx, ok, results)
                 return callback
 
             page = PhasePage(
@@ -89,6 +106,7 @@ class MainWindow(QWidget):
                 locked_subtests=locked_subtests,
                 unlock_when_subtests_done=unlock_when_subtests_done,
                 status_callback=make_status_callback(index),
+                execute_all_subtests=execute_all_subtests,
             )
             page.next_button.clicked.connect(self.next_phase)
             self.phase_pages.append(page)
@@ -104,13 +122,42 @@ class MainWindow(QWidget):
 
         self.current_phase_index = -1
 
-    def update_phase_status(self, index, ok):
+    def update_phase_status(self, index, ok, results=None):
         if 0 <= index < len(PHASES):
             phase_name = PHASES[index]
             self.phase_ok[phase_name] = ok
             self.menu_page.set_phase_status(index, ok)
             # Ensure the button is enabled so the user can re-run the test if needed
             self.menu_page.set_phase_enabled(index, True)
+
+            # If results are provided, and it's a subtest phase (not handled by make_phase_runner), save it.
+            cfg = PHASE_CONFIG.get(phase_name, {})
+            if cfg.get("enable_subtests_on_run") and results:
+                self.save_phase_result(phase_name, results, ok)
+
+    def save_phase_result(self, phase_name, results, ok):
+        values = {}
+        test_results = None
+        lines = []
+
+        if isinstance(results, list) and len(results) > 0 and isinstance(results[0], TestResult):
+            test_results = results
+            # Generate simple lines for display if needed
+            if phase_name == "Performance test / burn":
+                 lines = [render_performance_report(test_results)]
+            else:
+                 lines = [f"{tr.label}: {tr.value} {tr.unit} [{tr.status}]" for tr in test_results]
+            
+            # Populate values map for legacy lookups
+            for tr in test_results:
+                if tr.test_id and tr.test_id not in ("INFO", "ERROR", "FINAL"):
+                     values[tr.test_id] = tr.value
+        elif isinstance(results, list):
+            # Assume it's a list of strings (lines)
+            lines = results
+        
+        # Store result
+        self.session.add_phase_result(PhaseResult(phase_name, lines, ok, values, test_results=test_results))
 
     def start_sequence(self, technician_info, dut_info):
         self.eng_mode = False
@@ -197,6 +244,183 @@ class MainWindow(QWidget):
     def select_phase(self, index: int):
         if 0 <= index < len(PHASES):
             self.go_to_phase_safely(index)
+
+    def generate_pdf_report(self):
+        import os
+        
+        # Ensure TestResult directory exists
+        test_result_dir = os.path.join(os.getcwd(), "TestResults")
+        if not os.path.exists(test_result_dir):
+            try:
+                os.makedirs(test_result_dir)
+            except OSError:
+                # Fallback to current directory if creation fails
+                test_result_dir = os.getcwd()
+
+        dut_sn = self.session.dut_info.get("DUT_Serial", "")
+        default_name = f"Rapport_Test_{dut_sn}.pdf" if dut_sn else "Rapport_Test.pdf"
+        default_path = os.path.join(test_result_dir, default_name)
+        
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le rapport PDF", default_path, "PDF Files (*.pdf)"
+        )
+        if not filename:
+            return
+
+        report_data = self.session.to_full_report_data()
+        
+        # Build HTML content
+        html = "<html><head><style>"
+        html += "body { font-family: Arial, sans-serif; }"
+        html += "h1 { text-align: center; color: #333; }"
+        html += "h2 { color: #555; border-bottom: 1px solid #ccc; padding-bottom: 5px; }"
+        html += "table { width: 100%; border-collapse: collapse; margin-top: 10px; }"
+        html += "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }"
+        html += "th { background-color: #f2f2f2; }"
+        html += ".pass { color: green; font-weight: bold; }"
+        html += ".fail { color: red; font-weight: bold; }"
+        html += ".not-tested { color: gray; font-style: italic; }"
+        html += "</style></head><body>"
+        
+        html += "<h1>Rapport de Test RF Amplifier</h1>"
+        html += f"<p><b>Technicien (SSO):</b> {report_data['technician'].get('SSO', 'N/A')}</p>"
+        html += f"<p><b>Station ID:</b> {report_data['technician'].get('Station_ID', 'N/A')}</p>"
+        html += f"<p><b>Date:</b> {report_data['start_time']}</p>"
+        html += f"<p><b>ATE ID:</b> {report_data['technician'].get('ATE_ID', 'N/A')}</p>"
+        html += f"<p><b>DUT Serial:</b> {report_data['dut'].get('DUT_Serial', 'N/A')}</p>"
+        html += f"<p><b>Part Number:</b> {report_data['dut'].get('Part_Number', 'N/A')}</p>"
+        
+        # Create a map of executed phases for easy lookup
+        executed_phases_map = {p['name']: p for p in report_data['phases']}
+        
+        # Iterate over ALL defined phases to ensure complete report
+        for phase_name in PHASES:
+            cfg = PHASE_CONFIG.get(phase_name, {})
+            display_name = cfg.get("display_name", phase_name)
+            
+            if phase_name in executed_phases_map:
+                # Phase was executed
+                phase = executed_phases_map[phase_name]
+                status_color = "green" if phase['ok'] else "red"
+                status_text = "PASS" if phase['ok'] else "FAIL"
+                
+                html += f"<h2>{display_name} <span style='color:{status_color}; font-size:0.8em;'>({status_text})</span></h2>"
+                
+                # Add phase specific lines/summary
+                if phase['lines']:
+                    html += "<ul>"
+                    for line in phase['lines']:
+                         html += f"<li>{line}</li>"
+                    html += "</ul>"
+
+                # Add detailed test results table
+                if 'results' in phase and phase['results']:
+                     valid_results = [r for r in phase['results'] if 'label' in r]
+                     if valid_results:
+                         html += "<table>"
+                         html += "<tr><th>Test</th><th>Valeur</th><th>Unité</th><th>Min</th><th>Max</th><th>Statut</th></tr>"
+                         for res in valid_results:
+                             status_class = "pass" if res.get('status') in ("PASS", "OK") else "fail"
+                             html += f"<tr>"
+                             html += f"<td>{res.get('label', '')}</td>"
+                             html += f"<td>{res.get('value', '')}</td>"
+                             html += f"<td>{res.get('unit', '')}</td>"
+                             html += f"<td>{res.get('min') if res.get('min') is not None else ''}</td>"
+                             html += f"<td>{res.get('max') if res.get('max') is not None else ''}</td>"
+                             html += f"<td class='{status_class}'>{res.get('status', '')}</td>"
+                             html += "</tr>"
+                         html += "</table>"
+            else:
+                # Phase was NOT executed
+                html += f"<h2>{display_name} <span class='not-tested' style='font-size:0.8em;'>(Non testé)</span></h2>"
+                html += "<p class='not-tested'>Ce test n'a pas été exécuté.</p>"
+            
+        html += "</body></html>"
+        
+        document = QTextDocument()
+        document.setHtml(html)
+        
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(filename)
+        
+        document.print_(printer)
+        QMessageBox.information(self, "PDF", f"Rapport enregistré sous:\n{filename}")
+
+    def generate_csv_report(self):
+        import os
+        import csv
+        
+        # Ensure TestResult directory exists
+        test_result_dir = os.path.join(os.getcwd(), "TestResults")
+        if not os.path.exists(test_result_dir):
+            try:
+                os.makedirs(test_result_dir)
+            except OSError:
+                test_result_dir = os.getcwd()
+
+        dut_sn = self.session.dut_info.get("DUT_Serial", "UNKNOWN_SN")
+        now = datetime.datetime.now()
+        date_str = now.strftime("%Y%m%d") # 20260306
+        time_str = now.strftime("%I%M%S %p") # 034128 PM
+        
+        # Format: eDHR_report_SN_Date_heure
+        default_name = f"eDHR_report_{dut_sn}_{date_str}_{time_str}.csv"
+        default_path = os.path.join(test_result_dir, default_name)
+        
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer les données CSV", default_path, "CSV Files (*.csv)"
+        )
+        if not filename:
+            return
+
+        try:
+            # Gather filtered and sorted results from SessionData
+            all_results = self.session.get_exportable_test_results()
+
+            if not all_results:
+                 QMessageBox.warning(self, "CSV", "Aucune donnée valide (TestID correspondant) à exporter.")
+                 return
+
+            # Write file with 'cp1252' (ANSI) encoding
+            with open(filename, 'w', newline='', encoding='cp1252', errors='replace') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Header Structure
+                # [SN]
+                # {SN}
+                writer.writerow(["[SN]"])
+                writer.writerow([dut_sn])
+                
+                # [START]
+                writer.writerow(["[START]"])
+                
+                # [DATA START]
+                writer.writerow(["[DATA START]"])
+                
+                # TAG,DATA
+                for tr in all_results:
+                    # Constraint: Tag must be less than 20 chars
+                    tag = str(tr.test_id)
+                    if len(tag) > 20:
+                        tag = tag[:20]
+                    
+                    # Format value
+                    val_str = str(tr.value)
+                    if isinstance(tr.value, (int, float)):
+                         if isinstance(tr.value, float) and tr.value.is_integer():
+                             val_str = f"{int(tr.value)}"
+                         elif isinstance(tr.value, float):
+                             val_str = f"{tr.value:.2f}"
+                    
+                    writer.writerow([tag, val_str])
+                
+                # [DATA END]
+                writer.writerow(["[DATA END]"])
+                
+            QMessageBox.information(self, "CSV", f"Données enregistrées sous:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur CSV", f"Erreur lors de l'export CSV:\n{str(e)}")
 
     def go_to_phase_safely(self, index):
         """
